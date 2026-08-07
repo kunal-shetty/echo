@@ -1,5 +1,5 @@
-import { EchoApp } from '@/components/echo-shell'
+import { EchoApp } from "@/components/echo-shell";
 
 export default function Page() {
-  return <EchoApp />
+  return <EchoApp />;
 }
