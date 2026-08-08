@@ -308,49 +308,69 @@ button {
   display: grid;
   width: 100%;
   max-width: 430px;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr) auto;
+  align-items: end;
   transform: translateX(-50%);
   border-top: 1px solid var(--border);
-  background: oklch(0.13 0.025 255 / 90%);
-  padding: 0.65rem 0.7rem calc(0.65rem + env(safe-area-inset-bottom));
+  background: oklch(0.13 0.025 255 / 92%);
+  padding: 0.55rem 0.6rem calc(0.7rem + env(safe-area-inset-bottom));
   backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 .nav-item {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: end;
   gap: 0.3rem;
+  padding: 0.55rem 0.4rem 0.3rem;
   color: var(--muted-foreground);
   font-size: 0.66rem;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.nav-item .nav-pill {
+  position: absolute;
+  z-index: -1;
+  inset: 0.15rem 0.55rem;
+  border-radius: 0.95rem;
+  background: oklch(0.78 0.17 160 / 14%);
 }
 .nav-item.active {
   color: var(--emerald);
 }
 .voice-nav-button {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.15rem;
-  width: 3.8rem;
-  height: 3.8rem;
-  margin: -1.55rem auto -0.2rem;
+  gap: 0.2rem;
+  width: 4.6rem;
+  height: 4.6rem;
+  margin: -1.6rem 0.25rem -0.4rem;
   border: 4px solid var(--background);
-  border-radius: 1.25rem;
+  border-radius: 1.4rem;
   background: var(--emerald);
   color: var(--primary-foreground);
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 700;
-  box-shadow: 0 10px 28px oklch(0.78 0.17 160 / 25%);
+  letter-spacing: 0.01em;
+  box-shadow: 0 12px 32px oklch(0.78 0.17 160 / 32%);
   transition:
     transform 0.2s,
     box-shadow 0.2s;
+  cursor: pointer;
 }
 .voice-nav-button.is-holding {
   transform: scale(1.08);
   box-shadow:
-    0 0 0 0.65rem oklch(0.78 0.17 160 / 18%),
-    0 10px 28px oklch(0.78 0.17 160 / 35%);
+    0 0 0 0.6rem oklch(0.78 0.17 160 / 18%),
+    0 14px 34px oklch(0.78 0.17 160 / 40%);
 }
 .primary-button {
   display: flex;
@@ -388,6 +408,7 @@ button {
   justify-content: center;
   background: oklch(0.03 0.01 255 / 65%);
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 .voice-sheet {
   width: 100%;
@@ -396,7 +417,9 @@ button {
   border-bottom: 0;
   border-radius: 1.5rem 1.5rem 0 0;
   background: var(--surface-2);
-  padding: 1rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
+  padding: 0.6rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom));
+  will-change: transform;
+  touch-action: none;
 }
 .voice-orb {
   position: relative;
@@ -589,5 +612,219 @@ button {
     margin: 1rem auto;
     border: 1px solid var(--border);
     border-radius: 2rem;
+  }
+}
+
+/* ----------------------------------------------------------------------- */
+/*  Animations & view transitions                                          */
+/* ----------------------------------------------------------------------- */
+
+/* The bottom-sheet wrapper. Handle + drag affordances live here. */
+.sheet-handle {
+  width: 2.5rem;
+  height: 0.28rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+  margin: 0 auto 0.9rem;
+  transition: background 0.2s;
+}
+.sheet-handle.dragging {
+  background: var(--muted-foreground);
+}
+
+/* Orb pulse — three concentric rings expanding outward. */
+.orb-pulse-ring {
+  position: absolute;
+  inset: 0;
+  border: 1px solid oklch(0.78 0.17 160 / 28%);
+  border-radius: 50%;
+  animation: orbPulse 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+.orb-pulse-ring:nth-child(2) {
+  animation-delay: 0.8s;
+}
+.orb-pulse-ring:nth-child(3) {
+  animation-delay: 1.6s;
+}
+@keyframes orbPulse {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+/* Sliding pill behind the active nav item. Driven by `layoutId` in motion. */
+/* (pill lives inside `.nav-item`; see the rule above) */
+
+/* iOS-style segmented control. */
+.segmented {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--surface-1);
+  padding: 0.25rem;
+  gap: 0.25rem;
+  position: relative;
+}
+.segmented-item {
+  position: relative;
+  z-index: 1;
+  border: 0;
+  background: transparent;
+  padding: 0.55rem 0.6rem;
+  border-radius: 0.7rem;
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.25s;
+  white-space: nowrap;
+}
+.segmented-item[data-active="true"] {
+  color: var(--foreground);
+}
+.segmented-thumb {
+  position: absolute;
+  z-index: 0;
+  inset: 0.25rem;
+  border-radius: 0.7rem;
+  background: var(--surface-3);
+  box-shadow: 0 1px 0 oklch(1 0 0 / 4%) inset;
+}
+
+/* Toast — animated confirmation. */
+.toast {
+  position: fixed;
+  z-index: 50;
+  left: 50%;
+  bottom: calc(6.5rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  padding: 0.6rem 0.95rem;
+  color: var(--foreground);
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-shadow: 0 10px 30px oklch(0.03 0.01 255 / 40%);
+  pointer-events: none;
+}
+
+/* Listing enter — slight lift + fade. */
+@keyframes echoIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.echo-in {
+  animation: echoIn 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Stagger helper. */
+.echo-stagger > * {
+  animation: echoIn 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.echo-stagger > *:nth-child(1) { animation-delay: 0.04s; }
+.echo-stagger > *:nth-child(2) { animation-delay: 0.08s; }
+.echo-stagger > *:nth-child(3) { animation-delay: 0.12s; }
+.echo-stagger > *:nth-child(4) { animation-delay: 0.16s; }
+.echo-stagger > *:nth-child(5) { animation-delay: 0.2s; }
+.echo-stagger > *:nth-child(6) { animation-delay: 0.24s; }
+.echo-stagger > *:nth-child(7) { animation-delay: 0.28s; }
+.echo-stagger > *:nth-child(8) { animation-delay: 0.32s; }
+
+/* View-transition hooks used by React 19's <ViewTransition>.
+ * These names are referenced from `echo-shell.tsx`. */
+::view-transition-old(echo-screen) {
+  animation: 0.18s ease-out both echoFade reverse;
+}
+::view-transition-new(echo-screen) {
+  animation: 0.28s cubic-bezier(0.16, 1, 0.3, 1) both echoFade;
+}
+::view-transition-old(echo-orb) {
+  animation: 0.22s ease-in both echoFade reverse;
+}
+::view-transition-new(echo-orb) {
+  animation: 0.36s cubic-bezier(0.16, 1, 0.3, 1) both echoFade;
+}
+::view-transition-group(echo-header) {
+  animation: none;
+  z-index: 100;
+}
+::view-transition-old(echo-header) {
+  display: none;
+}
+::view-transition-new(echo-header) {
+  animation: none;
+}
+
+/* General keyframes used by view-transition classes. */
+@keyframes echoFade {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+
+/* Make sure the view-transition overlay doesn't steal clicks. */
+::view-transition {
+  pointer-events: none;
+}
+
+/* Header gains a soft border-shadow when scrolled, set inline by JS. */
+.echo-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: linear-gradient(
+    180deg,
+    var(--background) 0%,
+    var(--background) 70%,
+    oklch(0.13 0.025 255 / 0%) 100%
+  );
+  backdrop-filter: blur(0px);
+  transition: backdrop-filter 0.3s;
+}
+.echo-header.is-scrolled {
+  backdrop-filter: blur(14px);
+}
+
+/* Reduced-motion: zero out animations. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .orb-pulse-ring {
+    animation: none !important;
+  }
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
   }
 }
