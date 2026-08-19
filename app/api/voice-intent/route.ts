@@ -31,6 +31,7 @@ interface IntentResponse {
     amount: number;
     merchant: string;
     categoryId: string | null;
+    direction: "expense" | "income";
     transactedAt: string;
     rawTranscript: string;
     confidence: number;
@@ -161,6 +162,7 @@ export async function POST(req: Request) {
         patch.merchant_canonical = resolved.canonical;
       }
       if (parsed.newTransactedAt) patch.transacted_at = parsed.newTransactedAt;
+      if (parsed.direction) patch.direction = parsed.direction;
       if (parsed.category) {
         const catId = pickCategoryId(parsed.category, sysCats);
         if (catId) patch.category_id = catId;
@@ -233,7 +235,7 @@ export async function POST(req: Request) {
       category_id: categoryId,
       amount_minor: parsed.amount,
       currency: "INR",
-      direction: "expense",
+      direction: parsed.direction ?? "expense",
       merchant_raw: parsed.merchant,
       merchant_canonical: merchantCanonical,
       note: null,
@@ -248,6 +250,7 @@ export async function POST(req: Request) {
       amount: parsed.amount,
       merchant: parsed.merchant,
       categoryId,
+      direction: parsed.direction ?? "expense",
       transactedAt,
       rawTranscript: transcript,
       confidence: parsed.confidence,
