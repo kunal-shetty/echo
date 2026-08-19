@@ -6,7 +6,7 @@ import { ArrowUpRight, Check, Mic, Plus, Sparkles } from "lucide-react";
 import { Logo } from "@/components/shared";
 import { Field } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/segmented";
-import { money } from "@/lib/fmt";
+import { money, normalizeTranscript } from "@/lib/fmt";
 import { toUiCategory, useCategories } from "@/lib/use-categories";
 import { useSpeech } from "@/lib/use-speech";
 import type { ParseResult } from "@/lib/parse";
@@ -77,6 +77,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         if (!res.ok || data.error) {
           throw new Error(data.error ?? `HTTP ${res.status}`);
         }
+        // Prefill whatever the model returned, even on low confidence,
+        // so the user only has to fix what's wrong.
         if (typeof data.amount === "number" && data.amount > 0) {
           setConfirmedAmount(data.amount);
           setAmount(data.amount);
@@ -88,7 +90,20 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           );
           if (cat) setCategoryId(cat.id);
         }
-        setMode("confirm");
+        // Tiered routing on confidence:
+        //   < 0.3  → too uncertain, send to manual entry.
+        //   >= 0.7 → high confidence, advance past the confirm card.
+        //   0.3..0.7 → show the confirm card so the user can sanity-check.
+        if (data.confidence < 0.3 || data.amount == null || !data.merchant) {
+          setParseError(
+            "Couldn't parse that confidently. Please confirm below.",
+          );
+          setMode("manual");
+        } else if (data.confidence >= 0.7) {
+          handleExpenseSave(data.amount, data.merchant);
+        } else {
+          setMode("confirm");
+        }
       } catch (e) {
         setParseError(e instanceof Error ? e.message : "Parse failed");
         setMode("manual");
@@ -234,6 +249,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                   key="listening"
                   transcript={speech.transcript}
                   supported={speech.supported}
+                  listening={speech.listening}
                   error={speech.error}
                   onSkip={() => {
                     speech.stop();
@@ -462,12 +478,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 function ListeningPanel({
   transcript,
   supported,
+  listening,
   error,
   onSkip,
   onRetry,
 }: {
   transcript: string;
   supported: boolean;
+  listening: boolean;
   error: string | null;
   onSkip: () => void;
   onRetry: () => void;
@@ -491,16 +509,18 @@ function ListeningPanel({
       </div>
       {transcript ? (
         <p className="mt-1 text-base font-medium text-foreground">
-          “{transcript}”
+          “{normalizeTranscript(transcript)}”
         </p>
       ) : (
         <p className="font-medium">Echo is listening</p>
       )}
       {supported ? (
         <p className="text-sm text-muted-foreground">
-          {transcript
-            ? "Hold to add more, or wait…"
-            : "Try “Spent 150 on lunch.”"}
+          {listening
+            ? "Speak — I'll stop when you pause."
+            : transcript
+              ? "Hold to add more, or wait…"
+              : "Try “Spent 150 on lunch.”"}
         </p>
       ) : (
         <p className="text-sm text-muted-foreground">
@@ -548,7 +568,9 @@ function ParsingPanel({ transcript }: { transcript: string }) {
         <span className="orb-pulse-ring" />
       </div>
       {transcript && (
-        <p className="text-sm text-muted-foreground">“{transcript}”</p>
+        <p className="text-sm text-muted-foreground">
+          “{normalizeTranscript(transcript)}”
+        </p>
       )}
       <p className="font-medium">Echo is parsing with AI…</p>
     </motion.div>
