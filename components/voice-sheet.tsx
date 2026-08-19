@@ -45,6 +45,7 @@ export function VoiceSheet({
   const [amount, setAmount] = useState(0);
   const [merchant, setMerchant] = useState("");
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
+  const [direction, setDirection] = useState<"expense" | "income">("expense");
   const [transcript, setTranscript] = useState("");
   const [parseError, setParseError] = useState<string | null>(null);
   const [answer, setAnswer] = useState<AnswerState | null>(null);
@@ -117,6 +118,7 @@ export function VoiceSheet({
             amount: number;
             merchant: string;
             categoryId: string | null;
+            direction: "expense" | "income";
             transactedAt: string;
             confidence: number;
           };
@@ -198,6 +200,7 @@ export function VoiceSheet({
           setAmount(draft.amount);
           setMerchant(draft.merchant);
           if (draft.categoryId) setCategoryId(draft.categoryId);
+          if (draft.direction) setDirection(draft.direction);
         } else {
           // No draft but a result came back — pull the fields the old way.
           if (typeof result.amount === "number" && result.amount > 0) {
@@ -250,6 +253,7 @@ export function VoiceSheet({
     setMerchant("");
     setAmount(0);
     setConfirmedAmount(150);
+    setDirection("expense");
     setTranscript("");
     setParseError(null);
     setAnswer(null);
@@ -274,6 +278,7 @@ export function VoiceSheet({
   ) => {
     const cat = category;
     const isManual = mode === "manual";
+    const fallbackName = direction === "income" ? "Income" : "Expense";
     const expense: Transaction = {
       id: `local-${Date.now()}`,
       userId: "user-1",
@@ -281,9 +286,9 @@ export function VoiceSheet({
       categoryId: cat?.id ?? null,
       amountMinor: amountValue,
       currency: "INR",
-      direction: "expense",
-      merchantRaw: merchantValue || "Expense",
-      merchantCanonical: merchantValue || "Expense",
+      direction,
+      merchantRaw: merchantValue || fallbackName,
+      merchantCanonical: merchantValue || fallbackName,
       transactedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       source: isManual ? "manual" : "voice",
@@ -292,7 +297,7 @@ export function VoiceSheet({
         ? null
         : transcript || `spent ${amountValue} on ${merchantValue}`,
       clarified: false,
-      icon: (merchantValue || "E").charAt(0).toUpperCase(),
+      icon: (merchantValue || fallbackName).charAt(0).toUpperCase(),
       tone: cat?.tone ?? "neutral",
       date: "Today, just now",
       categoryName: cat?.name ?? null,
@@ -364,9 +369,11 @@ export function VoiceSheet({
           <ConfirmState
             key="confirm"
             amount={confirmedAmount}
-            merchant={merchant || "Lunch"}
+            merchant={merchant || (direction === "income" ? "Income" : "Lunch")}
+            direction={direction}
+            setDirection={setDirection}
             onPick={setConfirmedAmount}
-            onSave={() => save(confirmedAmount, merchant || "Lunch")}
+            onSave={() => save(confirmedAmount, merchant || (direction === "income" ? "Income" : "Lunch"))}
             onSwitchToManual={() => setMode("manual")}
           />
         ) : (
@@ -378,6 +385,8 @@ export function VoiceSheet({
             setMerchant={setMerchant}
             categoryId={categoryId}
             setCategoryId={setCategoryId}
+            direction={direction}
+            setDirection={setDirection}
             categories={categories}
             categoryName={category?.name ?? "your account"}
             parseError={parseError}
@@ -551,6 +560,7 @@ function AnswerState({
                   {row.date}
                 </span>
                 <span className="tabular-nums font-medium">
+                  {row.direction === "income" ? "+" : "−"}
                   {money(row.amountMinor)}
                 </span>
               </div>
@@ -595,16 +605,21 @@ function AnswerState({
 function ConfirmState({
   amount,
   merchant,
+  direction,
+  setDirection,
   onPick,
   onSave,
   onSwitchToManual,
 }: {
   amount: number;
   merchant: string;
+  direction: "expense" | "income";
+  setDirection: (v: "expense" | "income") => void;
   onPick: (v: number) => void;
   onSave: () => void;
   onSwitchToManual: () => void;
 }) {
+  const isIncome = direction === "income";
   return (
     <motion.div
       className="confirm-card"
@@ -614,17 +629,38 @@ function ConfirmState({
       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
     >
       <div className="flex items-center gap-3">
-        <div className="merchant-icon bg-orange-soft text-orange">
+        <div
+          className={`merchant-icon ${
+            isIncome
+              ? "bg-emerald-soft text-emerald"
+              : "bg-orange-soft text-orange"
+          }`}
+        >
           {merchant.charAt(0).toUpperCase()}
         </div>
         <div>
           <p className="font-medium">{merchant}</p>
-          <p className="text-sm text-muted-foreground">Voice capture · Today</p>
+          <p className="text-sm text-muted-foreground">
+            Voice capture · Today
+          </p>
         </div>
       </div>
+      <div className="mt-4">
+        <Segmented<"expense" | "income">
+          ariaLabel="confirm-direction"
+          value={direction}
+          onChange={setDirection}
+          options={[
+            { value: "expense", label: "Expense" },
+            { value: "income", label: "Income" },
+          ]}
+          size="sm"
+        />
+      </div>
       <p className="mt-5 text-sm text-muted-foreground">
-        I heard you spent{" "}
-        <span className="font-medium text-foreground">{money(amount)}</span> on{" "}
+        I heard you {isIncome ? "earned" : "spent"}{" "}
+        <span className="font-medium text-foreground">{money(amount)}</span>{" "}
+        {isIncome ? "from" : "on"}{" "}
         <span className="font-medium text-foreground">{merchant}</span>.
       </p>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -670,6 +706,8 @@ function ManualState({
   setMerchant,
   categoryId,
   setCategoryId,
+  direction,
+  setDirection,
   categories,
   categoryName,
   parseError,
@@ -681,12 +719,15 @@ function ManualState({
   setMerchant: (v: string) => void;
   categoryId: string;
   setCategoryId: (v: string) => void;
+  direction: "expense" | "income";
+  setDirection: (v: "expense" | "income") => void;
   categories: Array<{ id: string; name: string }>;
   categoryName: string;
   parseError: string | null;
   onSave: () => void;
 }) {
   const valid = amount > 0 && merchant.trim().length > 0;
+  const isIncome = direction === "income";
   return (
     <motion.div
       className="flex flex-col gap-4"
@@ -700,10 +741,20 @@ function ManualState({
           Voice parse didn&apos;t work: {parseError}
         </p>
       )}
+      <Segmented<"expense" | "income">
+        ariaLabel="manual-direction"
+        value={direction}
+        onChange={setDirection}
+        options={[
+          { value: "expense", label: "Expense" },
+          { value: "income", label: "Income" },
+        ]}
+        size="sm"
+      />
       <AmountStepper value={amount} onChange={setAmount} />
       <Field
-        label="What was it for?"
-        placeholder="e.g. Lunch"
+        label={isIncome ? "What did you receive?" : "What was it for?"}
+        placeholder={isIncome ? "e.g. Salary" : "e.g. Lunch"}
         leadingIcon={<Type size={16} />}
         autoFocus
         value={merchant}
