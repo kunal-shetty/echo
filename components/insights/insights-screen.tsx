@@ -58,7 +58,7 @@ export function InsightsScreen({
           <EmptyInsights onVoice={onVoice} configured={configured} />
         ) : (
           <>
-            <ChartCard title="Spending mix" detail="This month">
+            <ChartCard title="Spending mix" detail="Expenses · This month">
               <motion.div
                 className="flex items-center gap-4 py-3"
                 initial={{ opacity: 0, scale: 0.92 }}
@@ -112,7 +112,7 @@ export function InsightsScreen({
                 </div>
               </motion.div>
             </ChartCard>
-            <ChartCard title="Monthly trend" detail="Remembered spend">
+            <ChartCard title="Monthly trend" detail="Expenses · last 6 months">
               <div className="mt-5 h-44">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart
@@ -243,13 +243,17 @@ function buildSeries(expenses: Transaction[]): {
   categoryData: Array<{ name: string; value: number; color: string }>;
   monthlyData: Array<{ month: string; spend: number }>;
 } {
-  if (expenses.length === 0) {
+  // Insights focus on spend patterns — income rows would distort the
+  // pie and trend, so filter to expenses here. Income lives on the
+  // Home summary card.
+  const spendRows = expenses.filter((t) => t.direction !== "income");
+  if (spendRows.length === 0) {
     return { categoryData: [], monthlyData: [] };
   }
 
   // Category mix — bucket by category name (or "Uncategorized").
   const byCategory = new Map<string, number>();
-  for (const tx of expenses) {
+  for (const tx of spendRows) {
     const key =
       tx.categoryId?.replace(/^cat-/, "") ?? tx.merchantRaw ?? "Other";
     byCategory.set(key, (byCategory.get(key) ?? 0) + tx.amountMinor);
@@ -278,7 +282,7 @@ function buildSeries(expenses: Transaction[]): {
     });
   }
   const monthIndex = new Map(months.map((m, i) => [m.month, i]));
-  for (const tx of expenses) {
+  for (const tx of spendRows) {
     const d = new Date(tx.transactedAt);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const idx = monthIndex.get(key);
