@@ -32,6 +32,18 @@ function defaultKindForQuery(transcript: string): QueryKind {
   return "sum";
 }
 
+/** Best-guess direction when the parser didn't return one. We mirror the
+ *  model cue list so spend-shaped queries get `expense` and
+ *  income-shaped ones get `income` even if the parser mis-classified
+ *  the action. */
+function defaultDirectionForQuery(transcript: string): "expense" | "income" {
+  const t = transcript.toLowerCase();
+  if (/(earn|earned|income|salary|received|got paid|credit|cashback|refund|deposit)/.test(t)) {
+    return "income";
+  }
+  return "expense";
+}
+
 export async function POST(req: Request) {
   let body: AskBody;
   try {
@@ -92,6 +104,8 @@ export async function POST(req: Request) {
     categoryName: parsed.queryCategory,
     merchant: parsed.queryMerchant,
     limit: parsed.queryLimit,
+    direction:
+      parsed.queryDirection ?? defaultDirectionForQuery(transcript),
   };
 
   try {
