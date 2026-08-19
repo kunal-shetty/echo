@@ -97,3 +97,13 @@ export function todayEyebrow(): string {
 export function shortMonth(month: string): string {
   return month.slice(0, 3);
 }
+
+// Echo is INR-first. Transcripts sometimes come back with "$" or "USD" even
+// though the user meant rupees. Normalize for display so the UI shows ₹.
+export function normalizeTranscript(text: string): string {
+  return text
+    .replace(/\$([0-9][\d,.]*)/g, "₹$1")
+    .replace(/\bUSD\b/g, "₹")
+    .replace(/\bdollars?\b/gi, "rupees")
+    .replace(/\bRs\.?\s*([0-9][\d,.]*)/gi, "₹$1");
+}
