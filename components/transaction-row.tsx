@@ -17,19 +17,17 @@ const toneClasses = {
 export function TransactionRow({
   item,
   index = 0,
+  onClick,
 }: {
   item: Transaction;
   index?: number;
+  onClick?: (item: Transaction) => void;
 }) {
-  // Category label can be derived from the categoryId slug for system
-  // categories (cat-food → "Food", etc.). Without a DB join we fall back
-  // to "Uncategorized".
-  const labelFromId = item.categoryId
-    ? item.categoryId
-        .replace(/^(cat-|system-)/, "")
-        .replace(/-/g, " ")
-        .replace(/\b\w/g, (c) => c.toUpperCase())
-    : null;
+  // Category label comes from the joined categories table (populated
+  // server-side in `toUiTransaction`). Falls back to "Uncategorized"
+  // when the transaction has no category assigned.
+  const categoryLabel = item.categoryName ?? "Uncategorized";
+  const interactive = Boolean(onClick);
   return (
     <motion.div
       className="flex items-center gap-3 py-3"
@@ -38,12 +36,25 @@ export function TransactionRow({
       transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1], delay: index * 0.04 }}
       whileTap={{ scale: 0.99, backgroundColor: "oklch(0.18 0.03 255 / 60%)" }}
       style={{ borderRadius: "0.9rem", padding: "0.6rem 0.5rem" }}
+      onClick={interactive ? () => onClick!(item) : undefined}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick!(item);
+              }
+            }
+          : undefined
+      }
     >
       <div className={`merchant-icon ${toneClasses[item.tone]}`}>{item.icon}</div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{item.merchantRaw}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          {labelFromId ?? "Uncategorized"} · {item.date}
+          {categoryLabel} · {item.date}
         </p>
       </div>
       <p className="text-sm font-medium tabular-nums">
