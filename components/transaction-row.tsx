@@ -52,13 +52,21 @@ export function TransactionRow({
     >
       <div className={`merchant-icon ${toneClasses[item.tone]}`}>{item.icon}</div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{item.merchantRaw}</p>
+        <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+          {item.merchantRaw}
+          {item.direction === "income" ? (
+            <span className="shrink-0 rounded-full bg-emerald/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald">
+              Income
+            </span>
+          ) : null}
+        </p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {categoryLabel} · {item.date}
         </p>
       </div>
       <p className="text-sm font-medium tabular-nums">
-        −{money(item.amountMinor, item.currency)}
+        {item.direction === "income" ? "+" : "−"}
+        {money(item.amountMinor, item.currency)}
       </p>
     </motion.div>
   );
