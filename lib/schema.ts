@@ -76,6 +76,8 @@ export interface Transaction {
   tone: Tone;
   /** Pre-formatted relative date label ("Today, 9:42 AM") */
   date: string;
+  /** Resolved category display name (from joined categories table). */
+  categoryName: string | null;
 }
 
 export interface VoiceSession {
