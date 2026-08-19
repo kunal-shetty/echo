@@ -24,6 +24,8 @@ export type ParseResult = {
   amount: number | null;
   merchant: string | null;
   category: string | null;
+  /** Whether the utterance is spending or receiving money. */
+  direction: "expense" | "income" | null;
   /** ISO timestamp; defaults to "now" if the user didn't specify. */
   transactedAt: string | null;
   /** id of the transaction being updated/deleted, if applicable. */
@@ -38,6 +40,8 @@ export type ParseResult = {
   queryCategory: string | null;
   queryMerchant: string | null;
   queryLimit: number | null;
+  /** Whether the query is about spend or income. Null = both. */
+  queryDirection: "expense" | "income" | null;
   /** 0–1 confidence in the parse. */
   confidence: number;
   /** The raw transcript Echo heard. */
