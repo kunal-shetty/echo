@@ -42,6 +42,10 @@ The user dictates short utterances like:
   "rupees two thousand three hundred for groceries at bigbasket"
   "spent 2000 on dinner"  // ambiguous currency — assume INR
   "spent $30 on coffee yesterday"
+  "received 50,000 salary"
+  "got my freelance payment of 12,000 from client X"
+  "credited 800 refund from Amazon"
+  "earned 2,000 cashback"
   "update my yesterday dinner date with Ayushi, it was 1800 not 2000"
   "delete the blinkit order I added just now"
   "change the groceries entry from yesterday to 950"
@@ -51,25 +55,34 @@ The user dictates short utterances like:
   "show me my last 5 expenses"
   "what was my biggest expense this month"
   "how much have I spent on Ayushi"
+  "how much did I earn this month"
+  "how much income did I get this week"
 
 ## Intent classification
 Every utterance is one of four actions. Pick exactly one:
 
-- "create" — the user is recording a NEW expense. Cues: starts with "spent", "paid", "bought", or describes a past purchase with an amount and merchant.
+- "create" — the user is recording a NEW expense or income. Cues: starts with "spent", "paid", "bought", "received", "got", "earned", "credited", "salary of", or describes a past money movement with an amount and source.
   * Required: amount, merchant.
   * Optional: category, transacted_at (default = today, current time).
-- "update" — the user is correcting or amending an EXISTING expense. Cues: starts with "update", "change", "fix", "correct", "it was X not Y".
+  * Set direction to "income" when the verb is credit-shaped (received / got / earned / credited / salary / freelance payment / refund / cashback), otherwise "expense".
+- "update" — the user is correcting or amending an EXISTING memory. Cues: starts with "update", "change", "fix", "correct", "it was X not Y".
   * Required: match (one entry from the recent list below, identified by its 'id'), and at least one of newAmount / newMerchant / newTransactedAt.
-- "delete" — the user is removing an existing expense. Cues: "delete", "remove", "cancel".
+  * If the user wants to flip a memory from expense → income or back, also set direction.
+- "delete" — the user is removing an existing memory. Cues: "delete", "remove", "cancel".
   * Required: match.id.
-- "query" — the user is asking a question about their spending. Cues: starts with "how much", "what did I", "show me", "what was my biggest", "total", "list", or any question word. NEVER has an amount-to-record.
+- "query" — the user is asking a question about their money. Cues: starts with "how much", "what did I", "show me", "what was my biggest", "total", "list", or any question word. NEVER has an amount-to-record.
   * Required: queryKind.
-  * Optional: queryRange, queryCategory, queryMerchant, queryLimit.
+  * Optional: queryRange, queryCategory, queryMerchant, queryLimit, queryDirection.
+
+### Direction
+- "expense" — money leaving (default for "spent/paid/bought").
+- "income" — money arriving. Cues: "received", "got", "earned", "salary", "credited", "freelance payment", "refund", "cashback", "deposit".
+- If unclear, default to "expense".
 
 ### Query kinds
 - "sum" — totals. Cues: "how much", "total", "sum".
-- "list" — show a list of expenses. Cues: "show me", "what did I spend", "list my".
-- "biggest" — single largest expense. Cues: "biggest", "largest", "most expensive".
+- "list" — show a list of memories. Cues: "show me", "what did I", "list my".
+- "biggest" — single largest memory. Cues: "biggest", "largest", "most expensive".
 
 ### Query ranges (default: "all")
 - "today" — same calendar day as today in user's timezone.
@@ -83,6 +96,10 @@ Every utterance is one of four actions. Pick exactly one:
 - queryCategory: one of "Food & Drink", "Groceries", "Transport", "Entertainment", "Shopping", "Bills", "Other". Set when the user says "on food", "for transport", etc.
 - queryMerchant: the merchant name they asked about. Examples: "on Zomato", "with Ayushi" (treat "with Ayushi" as a person/merchant), "at BigBasket".
 - queryLimit: number of items to list (default 5 for list queries; ignore for sum/biggest).
+- queryDirection:
+  * "expense" — when the user says "spent", "paid", "cost me", "how much on food". Default for spend-shaped queries.
+  * "income" — when the user says "earned", "received", "got paid", "salary", "income", "made".
+  * null — when the user explicitly asks for both, or the cue is ambiguous.
 
 ## Output schema
 Respond with STRICT JSON only. No commentary, no markdown, no code fences.
@@ -91,6 +108,7 @@ Respond with STRICT JSON only. No commentary, no markdown, no code fences.
   "action": "create" | "update" | "delete" | "query",
   "amount": number | null,                    // create only
   "merchant": string | null,                  // create only
+  "direction": "expense" | "income" | null,   // create + update
   "category": string | null,                  // create + update
   "transacted_at": string | null,             // create + update
   "match": { "id": string } | null,           // update + delete only
@@ -102,14 +120,15 @@ Respond with STRICT JSON only. No commentary, no markdown, no code fences.
   "queryCategory": string | null,             // query only
   "queryMerchant": string | null,             // query only
   "queryLimit": number | null,                // query (list) only
+  "queryDirection": "expense" | "income" | null,           // query only
   "confidence": number                        // 0..1, how sure you are
 }
 
 ## Rules
 - Currency is INR by default. "$", "dollars", "USD" → treat as rupees. Do NOT refuse the parse.
 - amount / newAmount: numeric, positive, in major units (no ₹, no Rs). Convert words ("twelve fifty" → 12.5). Indian formats ("12k" → 12000, "1.2L" → 120000).
-- merchant / newMerchant: short title-case ("lunch" → "Lunch", "blue bottle coffee" → "Blue Bottle Coffee"). Strip filler words like "on", "at", "for" from the start.
-- category (when set): one of "Food & Drink", "Groceries", "Transport", "Entertainment", "Shopping", "Bills", "Other". Pick the closest.
+- merchant / newMerchant: short title-case ("lunch" → "Lunch", "blue bottle coffee" → "Blue Bottle Coffee", "salary" → "Salary", "freelance payment" → "Freelance Payment"). Strip filler words like "on", "at", "for" from the start.
+- category (when set): one of "Food & Drink", "Groceries", "Transport", "Entertainment", "Shopping", "Bills", "Other". Pick the closest. For salary / freelance, "Other" is fine if nothing else fits.
 - match.id: when the recent transactions list below contains the user's intended target, use its id. If nothing in the list matches with reasonable confidence, set match to null and confidence below 0.5.
 - "how much have I spent on Ayushi" is a sum query filtered by merchant "Ayushi" (the model treats a person mentioned in spending context as a merchant).
 - "biggest" always implies list=1 (limit not needed).
@@ -123,6 +142,7 @@ interface GroqParseResponse {
   action?: string;
   amount?: number | null;
   merchant?: string | null;
+  direction?: string | null;
   category?: string | null;
   transacted_at?: string | null;
   match?: { id?: string } | null;
@@ -134,6 +154,7 @@ interface GroqParseResponse {
   queryCategory?: string | null;
   queryMerchant?: string | null;
   queryLimit?: number | null;
+  queryDirection?: string | null;
   confidence?: number;
 }
 
@@ -208,6 +229,7 @@ export async function parseTranscript(
     action,
     amount: numberOrNull(parsed.amount),
     merchant: stringOrNull(parsed.merchant),
+    direction: normalizeDirection(parsed.direction),
     category: stringOrNull(parsed.category),
     transactedAt: stringOrNull(parsed.transacted_at),
     matchId: stringOrNull(parsed.match?.id ?? null),
@@ -219,6 +241,7 @@ export async function parseTranscript(
     queryCategory: stringOrNull(parsed.queryCategory),
     queryMerchant: stringOrNull(parsed.queryMerchant),
     queryLimit: normalizeQueryLimit(parsed.queryLimit),
+    queryDirection: normalizeDirection(parsed.queryDirection),
     confidence,
     transcript,
   };
@@ -234,6 +257,11 @@ function normalizeAction(value: unknown): ParseResult["action"] {
     return value;
   }
   return "create";
+}
+
+function normalizeDirection(value: unknown): ParseResult["direction"] {
+  if (value === "expense" || value === "income") return value;
+  return null;
 }
 
 function normalizeQueryKind(v: unknown): ParseResult["queryKind"] {
