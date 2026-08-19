@@ -73,10 +73,24 @@ export function EchoApp() {
       confidence: expense.confidence,
       rawTranscript: expense.rawTranscript,
       transactedAt: expense.transactedAt,
+      clarified: expense.clarified,
     });
     setVoiceOpen(false);
     setToast(`Saved · ${expense.merchantRaw}`);
     return saved;
+  };
+
+  const handleUpdated = (expense: Transaction) => {
+    // Refresh the list so the home/activity screens reflect the change.
+    void tx.refresh();
+    setVoiceOpen(false);
+    setToast(`Updated · ${expense.merchantRaw}`);
+  };
+
+  const handleDeleted = (id: string) => {
+    void tx.refresh();
+    setVoiceOpen(false);
+    setToast("Deleted");
   };
 
   const completeOnboarding = async (
@@ -209,6 +223,8 @@ export function EchoApp() {
           open={voiceOpen}
           onClose={() => setVoiceOpen(false)}
           onSave={persistExpense}
+          onUpdated={handleUpdated}
+          onDeleted={handleDeleted}
         />
         <Toast message={toast} onDismiss={() => setToast(null)} />
       </div>
