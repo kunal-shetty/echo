@@ -46,6 +46,7 @@ export function toUiTransaction(
     icon,
     tone,
     date: formatRelative(row.transacted_at),
+    categoryName: cat?.name ?? null,
   };
 }
 
