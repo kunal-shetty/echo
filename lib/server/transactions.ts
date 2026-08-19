@@ -103,3 +103,37 @@ export async function getTransaction(
   if (error) throw error;
   return (data ?? null) as DbTransaction | null;
 }
+
+export interface BulkTransactionInsert {
+  account_id: string;
+  category_id: string | null;
+  amount_minor: number;
+  currency: string;
+  direction: "expense" | "income" | "transfer";
+  merchant_raw: string;
+  merchant_canonical: string | null;
+  note: string | null;
+  transacted_at: string;
+  source: "voice" | "manual" | "import" | "recurring";
+  confidence: number | null;
+  raw_transcript: string | null;
+  clarified: boolean;
+}
+
+/** Inserts a batch of transactions in a single round-trip. Caller is
+ *  responsible for resolving the default account and validating each
+ *  row; we just attach the user id and insert. */
+export async function bulkCreateTransactions(
+  userId: string,
+  rows: BulkTransactionInsert[],
+): Promise<DbTransaction[]> {
+  if (rows.length === 0) return [];
+  const supabase = getSupabaseAdmin();
+  const tagged = rows.map((r) => ({ ...r, user_id: userId }));
+  const { data, error } = await supabase
+    .from("transactions")
+    .insert(tagged)
+    .select("*");
+  if (error) throw error;
+  return (data ?? []) as DbTransaction[];
+}
