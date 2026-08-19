@@ -43,6 +43,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [confirmedAmount, setConfirmedAmount] = useState(180);
   const [merchant, setMerchant] = useState("");
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
+  const [direction, setDirection] = useState<"expense" | "income">("expense");
   const [transcript, setTranscript] = useState("");
   const [parseError, setParseError] = useState<string | null>(null);
 
@@ -84,6 +85,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           setAmount(data.amount);
         }
         if (data.merchant) setMerchant(data.merchant);
+        if (data.direction) setDirection(data.direction);
         if (data.category) {
           const cat = categories.find(
             (c) => c.name.toLowerCase() === data.category!.toLowerCase(),
@@ -146,9 +148,9 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       categoryId: cat?.id ?? null,
       amountMinor: amountValue,
       currency: "INR",
-      direction: "expense",
-      merchantRaw: merchantValue || "Expense",
-      merchantCanonical: merchantValue || "Expense",
+      direction,
+      merchantRaw: merchantValue || (direction === "income" ? "Income" : "Expense"),
+      merchantCanonical: merchantValue || (direction === "income" ? "Income" : "Expense"),
       transactedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       source: mode === "manual" ? "manual" : "voice",
@@ -158,7 +160,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           ? null
           : transcript || `spent ${amountValue} on ${merchantValue}`,
       clarified: false,
-      icon: (merchantValue || "E").charAt(0).toUpperCase(),
+      icon: (merchantValue || (direction === "income" ? "I" : "E")).charAt(0).toUpperCase(),
       tone: cat?.tone ?? "neutral",
       date: "Today, just now",
       categoryName: cat?.name ?? null,
@@ -170,7 +172,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     merchantValue: string,
   ) => {
     const finalAmount = amountValue > 0 ? amountValue : confirmedAmount;
-    const finalMerchant = merchantValue || "Lunch";
+    const finalMerchant = merchantValue || (direction === "income" ? "Income" : "Lunch");
     speech.stop();
     setStep("remembered");
     if (advanceTimer.current) clearTimeout(advanceTimer.current);
@@ -239,7 +241,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
           >
             <p className="eyebrow text-emerald">Start with today</p>
-            <h1>Tell me one thing you spent money on today.</h1>
+            <h1>Tell me one thing you earned or spent today.</h1>
             <p>
               Say it naturally. Echo will listen, parse it with AI, and remember
               it for you.
@@ -287,6 +289,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                   setMerchant={setMerchant}
                   categoryId={categoryId}
                   setCategoryId={setCategoryId}
+                  direction={direction}
+                  setDirection={setDirection}
                   categories={categories}
                   parseError={parseError}
                   onSave={() => handleExpenseSave(amount, merchant)}
@@ -662,6 +666,8 @@ function ManualPanel({
   setMerchant,
   categoryId,
   setCategoryId,
+  direction,
+  setDirection,
   categories,
   parseError,
   onSave,
@@ -672,6 +678,8 @@ function ManualPanel({
   setMerchant: (v: string) => void;
   categoryId: string;
   setCategoryId: (v: string) => void;
+  direction: "expense" | "income";
+  setDirection: (v: "expense" | "income") => void;
   categories: Array<{ id: string; name: string }>;
   parseError: string | null;
   onSave: () => void;
@@ -690,9 +698,28 @@ function ManualPanel({
           below.
         </p>
       )}
+      <div>
+        <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+          Type
+        </p>
+        <Segmented<"expense" | "income">
+          ariaLabel="onboarding-direction"
+          value={direction}
+          onChange={setDirection}
+          options={[
+            { value: "expense", label: "Expense" },
+            { value: "income", label: "Income" },
+          ]}
+          size="sm"
+        />
+      </div>
       <Field
-        label="What was it for?"
-        placeholder="e.g. Lunch"
+        label={
+          direction === "income"
+            ? "What did you receive?"
+            : "What was it for?"
+        }
+        placeholder={direction === "income" ? "e.g. Salary" : "e.g. Lunch"}
         autoFocus
         value={merchant}
         onChange={(e) => setMerchant(e.target.value)}
