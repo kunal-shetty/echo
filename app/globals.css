@@ -828,3 +828,94 @@ button {
     animation-delay: 0s !important;
   }
 }
+
+/* =====================================================================
+ *  FAB (add menu)
+ * ===================================================================== */
+
+.fab-backdrop {
+  position: fixed;
+  z-index: 24;
+  inset: 0;
+  background: oklch(0.03 0.01 255 / 35%);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border: 0;
+  cursor: default;
+}
+.fab-root {
+  position: fixed;
+  z-index: 25;
+  right: 1rem;
+  bottom: calc(5.5rem + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: end;
+  gap: 0.6rem;
+  pointer-events: none;
+}
+.fab-root > * {
+  pointer-events: auto;
+}
+.fab-main {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--emerald);
+  color: var(--primary-foreground);
+  box-shadow: 0 12px 28px oklch(0.78 0.17 160 / 32%);
+  cursor: pointer;
+}
+.fab-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--foreground);
+  font-size: 0.85rem;
+  box-shadow: 0 6px 18px oklch(0.05 0.02 255 / 35%);
+}
+
+/* Tone-colored ring utilities for the icon picker. */
+.ring-violet {
+  --tw-ring-color: oklch(0.74 0.15 275 / 70%);
+}
+.ring-orange {
+  --tw-ring-color: oklch(0.8 0.14 65 / 70%);
+}
+.ring-blue {
+  --tw-ring-color: oklch(0.73 0.13 220 / 70%);
+}
+.ring-emerald {
+  --tw-ring-color: oklch(0.78 0.17 160 / 70%);
+}
+.ring-pink {
+  --tw-ring-color: oklch(0.74 0.14 335 / 70%);
+}
+.ring-red {
+  --tw-ring-color: oklch(0.7 0.13 30 / 70%);
+}
+.ring-muted-foreground {
+  --tw-ring-color: oklch(0.66 0.025 250 / 70%);
+}
+.bg-red\/15 {
+  background: oklch(0.7 0.13 30 / 15%);
+}
+.text-red {
+  color: oklch(0.78 0.16 28);
+}
+.border-red\/60 {
+  border-color: oklch(0.7 0.13 30 / 60%);
+}
+.bg-red\/10 {
+  background: oklch(0.7 0.13 30 / 10%);
+}
+.border-red\/40 {
+  border-color: oklch(0.7 0.13 30 / 40%);
+}
