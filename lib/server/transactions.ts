@@ -63,3 +63,43 @@ export async function deleteTransaction(id: string): Promise<void> {
     .eq("id", id)
     .eq("user_id", userId);
 }
+
+export async function updateTransaction(
+  id: string,
+  patch: Partial<
+    Omit<
+      DbTransaction,
+      "id" | "user_id" | "created_at" | "deleted_at"
+    >
+  >,
+): Promise<DbTransaction | null> {
+  const userId = await getDeviceUserId();
+  if (!userId) return null;
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("transactions")
+    .update({ ...patch, clarified: true })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select("*")
+    .maybeSingle();
+  if (error) throw error;
+  return (data ?? null) as DbTransaction | null;
+}
+
+export async function getTransaction(
+  id: string,
+): Promise<DbTransaction | null> {
+  const userId = await getDeviceUserId();
+  if (!userId) return null;
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  return (data ?? null) as DbTransaction | null;
+}
