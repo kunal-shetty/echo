@@ -5,6 +5,7 @@ import { Plus } from "lucide-react";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { AmountStepper } from "@/components/ui/amount-stepper";
 import { Field } from "@/components/ui/field";
+import { Segmented } from "@/components/ui/segmented";
 import { CategorySheet } from "@/components/category-sheet";
 import { useCategories } from "@/lib/use-categories";
 import { useTransactions } from "@/lib/use-transactions";
@@ -55,6 +56,7 @@ export function ManualAddSheet({
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [date, setDate] = useState("");
+  const [direction, setDirection] = useState<"expense" | "income">("expense");
   const [categorySheetOpen, setCategorySheetOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -67,12 +69,14 @@ export function ManualAddSheet({
       setCategoryId(initial.categoryId);
       setNote(initial.note ?? "");
       setDate(toDateInput(initial.transactedAt));
+      setDirection(initial.direction === "income" ? "income" : "expense");
     } else {
       setAmount(0);
       setMerchant("");
       setCategoryId(null);
       setNote("");
       setDate(toDateInput(new Date().toISOString()));
+      setDirection("expense");
     }
   }, [open, mode, initial]);
 
@@ -96,9 +100,11 @@ export function ManualAddSheet({
         const updated = await tx.update(initial.id, {
           amountMinor: amount,
           merchantRaw: merchant.trim(),
+          merchantCanonical: merchant.trim(),
           categoryId,
-          note: note.trim() || null,
+          note: note.trim() || undefined,
           transactedAt,
+          direction,
         });
         if (updated) onSaved(updated, "edit");
       } else {
@@ -110,10 +116,10 @@ export function ManualAddSheet({
           categoryId,
           amountMinor: amount,
           currency: "INR",
-          direction: "expense",
+          direction,
           merchantRaw: merchant.trim(),
           merchantCanonical: merchant.trim(),
-          note: note.trim() || null,
+          note: note.trim() || undefined,
           source: "manual",
           confidence: null,
           rawTranscript: null,
@@ -136,6 +142,22 @@ export function ManualAddSheet({
         subtitle={mode === "edit" ? "Memory" : "New memory"}
       >
         <div className="flex flex-col gap-5">
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+              Type
+            </p>
+            <Segmented<"expense" | "income">
+              ariaLabel="direction"
+              value={direction}
+              onChange={setDirection}
+              options={[
+                { value: "expense", label: "Expense" },
+                { value: "income", label: "Income" },
+              ]}
+              size="sm"
+            />
+          </div>
+
           <AmountStepper
             value={amount}
             onChange={setAmount}
