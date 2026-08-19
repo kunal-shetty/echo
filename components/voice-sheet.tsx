@@ -252,9 +252,17 @@ export function VoiceSheet({
     setConfirmedAmount(150);
     setTranscript("");
     setParseError(null);
+    setAnswer(null);
+    synth.cancel();
     speech.reset();
     speech.start();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Stop any TTS when the sheet closes so it doesn't keep playing in the bg.
+  useEffect(() => {
+    if (open) return;
+    synth.cancel();
+  }, [open, synth]);
 
   const category =
     categories.find((c) => c.id === categoryId) ?? categories[0];
@@ -306,10 +314,14 @@ export function VoiceSheet({
             ? "Did I get this right?"
             : mode === "parsing"
               ? "Thinking…"
-              : undefined
+              : mode === "answer"
+                ? "Here's what I found"
+                : undefined
       }
       subtitle={
-        mode === "manual" || mode === "parsing" ? undefined : "Quick capture"
+        mode === "manual" || mode === "parsing" || mode === "answer"
+          ? undefined
+          : "Quick capture"
       }
     >
       <AnimatePresence mode="wait">
@@ -332,6 +344,21 @@ export function VoiceSheet({
           />
         ) : mode === "parsing" ? (
           <ParsingState key="parsing" transcript={transcript} />
+        ) : mode === "answer" ? (
+          <AnswerState
+            key="answer"
+            answer={answer}
+            speaking={synth.speaking}
+            supported={synth.supported}
+            onReplay={() => answer && synth.speak(answer.spoken)}
+            onAskAgain={() => {
+              setAnswer(null);
+              setMode("listening");
+              speech.reset();
+              speech.start();
+            }}
+            onClose={onClose}
+          />
         ) : mode === "confirm" ? (
           <ConfirmState
             key="confirm"
@@ -456,6 +483,110 @@ function ParsingState({ transcript }: { transcript: string }) {
         </p>
       )}
       <p className="font-medium">Echo is parsing…</p>
+    </motion.div>
+  );
+}
+
+function AnswerState({
+  answer,
+  speaking,
+  supported,
+  onReplay,
+  onAskAgain,
+  onClose,
+}: {
+  answer: AnswerState | null;
+  speaking: boolean;
+  supported: boolean;
+  onReplay: () => void;
+  onAskAgain: () => void;
+  onClose: () => void;
+}) {
+  if (!answer) return null;
+  return (
+    <motion.div
+      className="confirm-card"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <div className="flex items-center gap-3">
+        <div className="merchant-icon bg-emerald-soft text-emerald">
+          <Volume2 size={18} />
+        </div>
+        <div>
+          <p className="font-medium">{answer.headline}</p>
+          <p className="text-sm text-muted-foreground">
+            {answer.kind === "sum"
+              ? "Voice query · Total"
+              : answer.kind === "biggest"
+                ? "Voice query · Biggest"
+                : "Voice query · Recent"}
+          </p>
+        </div>
+      </div>
+
+      {answer.rows.length > 0 && (
+        <ul className="mt-4 flex max-h-72 flex-col gap-1 overflow-y-auto">
+          {answer.rows.map((row) => (
+            <li
+              key={row.id}
+              className="flex items-center justify-between rounded-lg border border-border/60 bg-surface-2/60 px-3 py-2 text-sm"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <span
+                  className="grid size-6 shrink-0 place-items-center rounded-md text-xs font-medium"
+                  style={{
+                    backgroundColor: "var(--surface-3, rgba(0,0,0,0.04))",
+                  }}
+                >
+                  {row.icon}
+                </span>
+                <span className="truncate font-medium">{row.merchantRaw}</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="text-xs text-muted-foreground">
+                  {row.date}
+                </span>
+                <span className="tabular-nums font-medium">
+                  {money(row.amountMinor)}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-4 flex gap-2">
+        {supported && (
+          <motion.button
+            type="button"
+            className="secondary-button !w-auto px-4"
+            onClick={onReplay}
+            whileTap={{ scale: 0.98 }}
+            disabled={speaking}
+          >
+            <Volume2 size={16} /> {speaking ? "Speaking…" : "Replay"}
+          </motion.button>
+        )}
+        <motion.button
+          type="button"
+          className="secondary-button !w-auto px-4"
+          onClick={onAskAgain}
+          whileTap={{ scale: 0.98 }}
+        >
+          <Mic size={16} /> Ask again
+        </motion.button>
+        <motion.button
+          type="button"
+          className="primary-button ml-auto"
+          onClick={onClose}
+          whileTap={{ scale: 0.99 }}
+        >
+          Done <Check size={17} />
+        </motion.button>
+      </div>
     </motion.div>
   );
 }
