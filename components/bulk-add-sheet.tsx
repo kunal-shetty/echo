@@ -24,10 +24,10 @@ interface BulkAddSheetProps {
 
 const PLACEHOLDER = `Paste rows. Auto-detects CSV or TSV. First row may be headers.
 
-date,amount,merchant,category,note
-2026-08-19,250,Lunch,Food & Drink,with Sam
-2026-08-19,400,Groceries,Groceries,
-2026-08-18,80,Coffee,Food & Drink,`;
+date,amount,merchant,category,note,direction
+2026-08-19,250,Lunch,Food & Drink,with Sam,expense
+2026-08-19,50000,Salary,Other,August paycheck,income
+2026-08-18,80,Coffee,Food & Drink,,expense`;
 
 export function BulkAddSheet({ open, onClose, onComplete }: BulkAddSheetProps) {
   const tx = useTransactions();
@@ -100,7 +100,7 @@ export function BulkAddSheet({ open, onClose, onComplete }: BulkAddSheetProps) {
             {parsed.detectedHeaders
               ? `Detected ${parsed.detectedDelimiter === "\t" ? "TSV" : "CSV"} with a header row.`
               : parsed.rows.length > 0
-                ? `Detected ${parsed.detectedDelimiter === "\t" ? "TSV" : "CSV"} — using default columns: date, amount, merchant, category, note.`
+                ? `Detected ${parsed.detectedDelimiter === "\t" ? "TSV" : "CSV"} — using default columns: date, amount, merchant, category, note, direction.`
                 : "Paste at least one row."}
           </p>
           <div className="flex gap-2">
@@ -311,13 +311,25 @@ function PreviewRow({
     );
   }
   const r = v.result.row;
+  const isIncome = r.direction === "income";
   return (
     <li className="flex items-center gap-3 px-3.5 py-2.5">
       <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-emerald/15 text-xs font-semibold text-emerald">
         ✓
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{r.merchantRaw}</p>
+        <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+          {r.merchantRaw}
+          <span
+            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+              isIncome
+                ? "bg-emerald/15 text-emerald"
+                : "bg-surface-3 text-muted-foreground"
+            }`}
+          >
+            {isIncome ? "Income" : "Expense"}
+          </span>
+        </p>
         <p className="truncate text-xs text-muted-foreground">
           {r.categoryName ?? "Uncategorized"}
           {r.date ? ` · ${r.date}` : ""}
@@ -325,6 +337,7 @@ function PreviewRow({
         </p>
       </div>
       <p className="text-sm font-medium tabular-nums">
+        {isIncome ? "+" : "−"}
         {money(r.amountMinor, "INR")}
       </p>
     </li>
@@ -343,5 +356,7 @@ function labelFor(field: BulkField): string {
       return "Category";
     case "note":
       return "Note";
+    case "direction":
+      return "Direction";
   }
 }
