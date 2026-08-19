@@ -1,27 +1,43 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, Mic, Plus, Tag as TagIcon, Type } from "lucide-react";
+import { Check, Mic, Plus, Tag as TagIcon, Type, Volume2 } from "lucide-react";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Field } from "@/components/ui/field";
 import { AmountStepper } from "@/components/ui/amount-stepper";
 import { Segmented } from "@/components/ui/segmented";
-import { money } from "@/lib/fmt";
+import { money, normalizeTranscript } from "@/lib/fmt";
 import { toUiCategory, useCategories } from "@/lib/use-categories";
 import { useSpeech } from "@/lib/use-speech";
+import { useSpeechSynth } from "@/lib/use-speech-synth";
 import type { ParseResult } from "@/lib/parse";
 import type { Transaction } from "@/lib/schema";
 
-type CaptureMode = "listening" | "confirm" | "manual" | "parsing";
+type CaptureMode = "listening" | "confirm" | "manual" | "parsing" | "answer";
+
+interface AnswerState {
+  headline: string;
+  spoken: string;
+  rows: Transaction[];
+  kind: "sum" | "list" | "biggest";
+}
 
 interface VoiceSheetProps {
   open: boolean;
   onClose: () => void;
   onSave: (expense: Transaction) => void;
+  onUpdated?: (expense: Transaction) => void;
+  onDeleted?: (id: string) => void;
 }
 
-export function VoiceSheet({ open, onClose, onSave }: VoiceSheetProps) {
+export function VoiceSheet({
+  open,
+  onClose,
+  onSave,
+  onUpdated,
+  onDeleted,
+}: VoiceSheetProps) {
   const { categories: rawCats } = useCategories();
   const categories = rawCats.map(toUiCategory);
   const [mode, setMode] = useState<CaptureMode>("listening");
@@ -31,6 +47,8 @@ export function VoiceSheet({ open, onClose, onSave }: VoiceSheetProps) {
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
   const [transcript, setTranscript] = useState("");
   const [parseError, setParseError] = useState<string | null>(null);
+  const [answer, setAnswer] = useState<AnswerState | null>(null);
+  const synth = useSpeechSynth();
 
   // Keep categoryId valid when categories load.
   useEffect(() => {
@@ -46,27 +64,177 @@ export function VoiceSheet({ open, onClose, onSave }: VoiceSheetProps) {
       if (!text) return;
       setMode("parsing");
       try {
-        const res = await fetch("/api/parse-transcript", {
+        // Cheap pre-classifier: if it sounds like a question, send to /api/ask.
+        // The ask endpoint itself re-classifies and falls back if needed.
+        const lowered = text.toLowerCase();
+        const looksLikeQuestion =
+          /^(how much|what (did|was|have)|show me|total|sum|biggest|largest|most|list)/i.test(
+            lowered,
+          );
+        if (looksLikeQuestion) {
+          const askRes = await fetch("/api/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcript: text }),
+          });
+          const askData = (await askRes.json().catch(() => ({}))) as {
+            result?: ParseResult;
+            query?: {
+              headline: string;
+              spoken: string;
+              rows: Transaction[];
+              kind: "sum" | "list" | "biggest";
+            };
+            error?: string;
+            warning?: string;
+          };
+          if (!askRes.ok || askData.error) {
+            throw new Error(askData.error ?? `HTTP ${askRes.status}`);
+          }
+          if (!askData.query) {
+            throw new Error("Empty response from /api/ask");
+          }
+          setAnswer({
+            headline: askData.query.headline,
+            spoken: askData.query.spoken,
+            rows: askData.query.rows ?? [],
+            kind: askData.query.kind,
+          });
+          setMode("answer");
+          // Speak the headline back. Cancels any prior utterance.
+          if (askData.query.spoken) synth.speak(askData.query.spoken);
+          return;
+        }
+
+        const res = await fetch("/api/voice-intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ transcript: text }),
         });
-        const data = (await res.json()) as ParseResult & { error?: string };
+        const data = (await res.json().catch(() => ({}))) as {
+          result?: ParseResult;
+          draft?: {
+            amount: number;
+            merchant: string;
+            categoryId: string | null;
+            transactedAt: string;
+            confidence: number;
+          };
+          transaction?: Transaction;
+          deletedId?: string;
+          warning?: string;
+          error?: string;
+        };
         if (!res.ok || data.error) {
           throw new Error(data.error ?? `HTTP ${res.status}`);
         }
-        if (typeof data.amount === "number" && data.amount > 0) {
-          setConfirmedAmount(data.amount);
-          setAmount(data.amount);
+        const result = data.result;
+        if (!result) {
+          throw new Error("Empty response from voice intent");
         }
-        if (data.merchant) setMerchant(data.merchant);
-        if (data.category) {
-          const cat = categories.find(
-            (c) => c.name.toLowerCase() === data.category!.toLowerCase(),
+
+        // Server-side query classification may have routed us to /api/ask
+        // via the parser even though the heuristic missed. Handle it here.
+        if (result.action === "query") {
+          const askRes = await fetch("/api/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcript: text }),
+          });
+          const askData = (await askRes.json().catch(() => ({}))) as {
+            query?: {
+              headline: string;
+              spoken: string;
+              rows: Transaction[];
+              kind: "sum" | "list" | "biggest";
+            };
+            error?: string;
+          };
+          if (!askRes.ok || askData.error) {
+            throw new Error(askData.error ?? `HTTP ${askRes.status}`);
+          }
+          if (!askData.query) {
+            throw new Error("Empty response from /api/ask");
+          }
+          setAnswer({
+            headline: askData.query.headline,
+            spoken: askData.query.spoken,
+            rows: askData.query.rows ?? [],
+            kind: askData.query.kind,
+          });
+          setMode("answer");
+          if (askData.query.spoken) synth.speak(askData.query.spoken);
+          return;
+        }
+
+        // Update / delete: server did the work; close the sheet and let the
+        // shell refresh + toast. The confirm card is for *creating* only.
+        if (result.action === "update" && data.transaction) {
+          speech.stop();
+          onUpdated?.(data.transaction);
+          onClose();
+          return;
+        }
+        if (result.action === "delete" && data.deletedId) {
+          speech.stop();
+          onDeleted?.(data.deletedId);
+          onClose();
+          return;
+        }
+        // Server could not match → fall back to manual so the user can fix.
+        if (
+          (result.action === "update" || result.action === "delete") &&
+          data.warning
+        ) {
+          setParseError(data.warning);
+          setMode("manual");
+          return;
+        }
+
+        // create flow — prefill from the draft the server returned.
+        const draft = data.draft;
+        if (draft) {
+          setConfirmedAmount(draft.amount);
+          setAmount(draft.amount);
+          setMerchant(draft.merchant);
+          if (draft.categoryId) setCategoryId(draft.categoryId);
+        } else {
+          // No draft but a result came back — pull the fields the old way.
+          if (typeof result.amount === "number" && result.amount > 0) {
+            setConfirmedAmount(result.amount);
+            setAmount(result.amount);
+          }
+          if (result.merchant) setMerchant(result.merchant);
+          if (result.category) {
+            const cat = categories.find(
+              (c) => c.name.toLowerCase() === result.category!.toLowerCase(),
+            );
+            if (cat) setCategoryId(cat.id);
+          }
+        }
+
+        // Tiered routing on confidence:
+        //   < 0.3  → too uncertain, send to manual entry.
+        //   >= 0.7 → high confidence, the server already saved it; just close.
+        //   0.3..0.7 → show the confirm card so the user can sanity-check.
+        if (
+          result.confidence < 0.3 ||
+          result.amount == null ||
+          !result.merchant
+        ) {
+          setParseError(
+            data.warning ??
+              "Couldn't parse that confidently. Please confirm below.",
           );
-          if (cat) setCategoryId(cat.id);
+          setMode("manual");
+        } else if (result.confidence >= 0.7) {
+          // The server already created the transaction on our behalf.
+          speech.stop();
+          if (data.transaction) onSave(data.transaction);
+          onClose();
+        } else {
+          setMode("confirm");
         }
-        setMode("confirm");
       } catch (e) {
         setParseError(e instanceof Error ? e.message : "Parse failed");
         // Fall through to manual so the user isn't stuck.
@@ -91,8 +259,13 @@ export function VoiceSheet({ open, onClose, onSave }: VoiceSheetProps) {
   const category =
     categories.find((c) => c.id === categoryId) ?? categories[0];
 
-  const save = (amountValue: number, merchantValue: string) => {
+  const save = (
+    amountValue: number,
+    merchantValue: string,
+    confidenceOverride?: number | null,
+  ) => {
     const cat = category;
+    const isManual = mode === "manual";
     const expense: Transaction = {
       id: `local-${Date.now()}`,
       userId: "user-1",
@@ -105,10 +278,11 @@ export function VoiceSheet({ open, onClose, onSave }: VoiceSheetProps) {
       merchantCanonical: merchantValue || "Expense",
       transactedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
-      source: mode === "manual" ? "manual" : "voice",
-      confidence: mode === "manual" ? null : 0.88,
-      rawTranscript:
-        mode === "manual" ? null : transcript || `spent ${amountValue} on ${merchantValue}`,
+      source: isManual ? "manual" : "voice",
+      confidence: isManual ? null : confidenceOverride ?? 0.88,
+      rawTranscript: isManual
+        ? null
+        : transcript || `spent ${amountValue} on ${merchantValue}`,
       clarified: false,
       icon: (merchantValue || "E").charAt(0).toUpperCase(),
       tone: cat?.tone ?? "neutral",
@@ -144,6 +318,7 @@ export function VoiceSheet({ open, onClose, onSave }: VoiceSheetProps) {
             key="listening"
             transcript={speech.transcript}
             supported={speech.supported}
+            listening={speech.listening}
             error={speech.error}
             onSkip={() => {
               speech.stop();
@@ -189,12 +364,14 @@ export function VoiceSheet({ open, onClose, onSave }: VoiceSheetProps) {
 function ListeningState({
   transcript,
   supported,
+  listening,
   error,
   onSkip,
   onRetry,
 }: {
   transcript: string;
   supported: boolean;
+  listening: boolean;
   error: string | null;
   onSkip: () => void;
   onRetry: () => void;
@@ -218,23 +395,25 @@ function ListeningState({
       </div>
       {transcript ? (
         <p className="mt-1 text-base font-medium text-foreground">
-          “{transcript}”
+          “{normalizeTranscript(transcript)}”
         </p>
       ) : (
         <p className="font-medium">Echo is listening</p>
       )}
       {supported ? (
         <p className="text-sm text-muted-foreground">
-          {transcript ? "Hold to add more, or wait…" : "Try “Spent 150 on lunch.”"}
+          {listening
+            ? "Speak — I'll stop when you pause."
+            : transcript
+              ? "Hold to add more, or wait…"
+              : "Try “Spent 150 on lunch.”"}
         </p>
       ) : (
         <p className="text-sm text-muted-foreground">
           Voice isn&apos;t supported in this browser.
         </p>
       )}
-      {error && (
-        <p className="mt-2 text-xs text-orange">{prettySpeechError(error)}</p>
-      )}
+      {error && <p className="mt-2 text-xs text-orange">{error}</p>}
       <div className="mt-4 flex gap-2">
         <button
           type="button"
@@ -272,7 +451,9 @@ function ParsingState({ transcript }: { transcript: string }) {
         <span className="orb-pulse-ring" />
       </div>
       {transcript && (
-        <p className="mt-1 text-sm text-muted-foreground">“{transcript}”</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          “{normalizeTranscript(transcript)}”
+        </p>
       )}
       <p className="font-medium">Echo is parsing…</p>
     </motion.div>
@@ -427,19 +608,4 @@ function ManualState({
       </p>
     </motion.div>
   );
-}
-
-function prettySpeechError(code: string): string {
-  switch (code) {
-    case "no-speech":
-      return "Didn't catch that. Try again?";
-    case "audio-capture":
-      return "No microphone found.";
-    case "not-allowed":
-      return "Microphone access denied.";
-    case "network":
-      return "Network error. Try again.";
-    default:
-      return `Speech error: ${code}`;
-  }
 }
