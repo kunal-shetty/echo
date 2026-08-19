@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Transaction } from "@/lib/schema";
 
-/** Fields the UI is allowed to edit. id / userId / source / direction
- *  are intentionally excluded — the server enforces the same whitelist. */
+/** Fields the UI is allowed to edit. id / userId / source
+ *  are intentionally excluded — the server enforces the same whitelist.
+ *  Direction is editable so the user can flip a memory between
+ *  expense and income after the fact. */
 export type EditTransactionPatch = {
   amountMinor?: number;
   currency?: string;
@@ -13,6 +15,7 @@ export type EditTransactionPatch = {
   categoryId?: string | null;
   note?: string | null;
   transactedAt?: string;
+  direction?: "expense" | "income";
 };
 
 /** Input for bulk-add. Matches the shape produced by the bulk parser:
@@ -27,6 +30,7 @@ export interface BulkRowInput {
   categoryId?: string | null;
   categoryName?: string | null;
   note?: string | null;
+  direction?: "expense" | "income";
 }
 
 export interface BulkAddResult {
@@ -65,6 +69,7 @@ function patchToBody(patch: EditTransactionPatch): Record<string, unknown> {
   if (patch.categoryId !== undefined) body.category_id = patch.categoryId;
   if (patch.note !== undefined) body.note = patch.note;
   if (patch.transactedAt !== undefined) body.transacted_at = patch.transactedAt;
+  if (patch.direction !== undefined) body.direction = patch.direction;
   return body;
 }
 
@@ -206,6 +211,7 @@ export function useTransactions(): TransactionsState {
           category_id: r.categoryId ?? null,
           category_name: r.categoryName ?? null,
           note: r.note ?? null,
+          direction: r.direction ?? null,
         })),
       };
       try {
