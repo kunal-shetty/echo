@@ -9,7 +9,13 @@
 
 import type { BulkRowInput } from "@/lib/use-transactions";
 
-export type BulkField = "date" | "amount" | "merchant" | "category" | "note";
+export type BulkField =
+  | "date"
+  | "amount"
+  | "merchant"
+  | "category"
+  | "note"
+  | "direction";
 
 export const BULK_FIELDS: BulkField[] = [
   "date",
@@ -17,6 +23,7 @@ export const BULK_FIELDS: BulkField[] = [
   "merchant",
   "category",
   "note",
+  "direction",
 ];
 
 export interface ParsedBulkRow {
@@ -71,9 +78,10 @@ function tokenize(line: string, delim: "," | "\t"): string[] {
 const HEADER_HINTS: Record<BulkField, string[]> = {
   date: ["date", "when", "day"],
   amount: ["amount", "cost", "total", "price", "value"],
-  merchant: ["merchant", "where", "what", "name", "item", "title"],
-  category: ["category", "tag", "group", "type"],
+  merchant: ["merchant", "where", "what", "name", "item", "title", "source"],
+  category: ["category", "tag", "group"],
   note: ["note", "notes", "memo", "comment", "description"],
+  direction: ["direction", "type", "kind", "flow", "txn type"],
 };
 
 function mapHeader(header: string): BulkField | "ignore" {
@@ -158,6 +166,7 @@ export function parseBulkPaste(
         [2, "merchant"],
         [3, "category"],
         [4, "note"],
+        [5, "direction"],
       ]);
       mapping = fixed;
       detectedHeaders = false;
@@ -230,6 +239,30 @@ export function validateRow(
       merchantRaw: merchant,
       categoryName: parsed.values.category ?? null,
       note: parsed.values.note ?? null,
+      direction: parseDirection(parsed.values.direction ?? null),
     },
   };
+}
+
+const INCOME_TOKENS = new Set([
+  "income",
+  "in",
+  "credit",
+  "credited",
+  "received",
+  "earn",
+  "earned",
+  "salary",
+  "deposit",
+  "incoming",
+]);
+
+function parseDirection(raw: string | null): "expense" | "income" {
+  if (!raw) return "expense";
+  const v = raw.trim().toLowerCase();
+  if (INCOME_TOKENS.has(v)) return "income";
+  // Treat values starting with "in" or "credit" as income (covers
+  // "inflow", "credit card cashback", "income_aug").
+  if (v.startsWith("in") || v.startsWith("credit")) return "income";
+  return "expense";
 }
