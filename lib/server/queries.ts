@@ -12,6 +12,8 @@ export interface QueryFilters {
   categoryName: string | null;
   merchant: string | null;
   limit: number | null;
+  /** Restrict to a specific direction. Null = both. */
+  direction: "expense" | "income" | null;
 }
 
 export interface QueryResult {
@@ -159,6 +161,7 @@ export async function runQuery(
       .lt("transacted_at", bounds[1].toISOString());
   }
   if (categoryId) q = q.eq("category_id", categoryId);
+  if (filters.direction) q = q.eq("direction", filters.direction);
   if (filters.merchant) {
     // Match canonical OR raw; case-insensitive ilike for fuzzy-ish behavior.
     q = q.or(
@@ -213,6 +216,14 @@ export async function runQuery(
   };
 }
 
+function verbFor(direction: QueryFilters["direction"]): {
+  past: string;
+  noun: string;
+} {
+  if (direction === "income") return { past: "earned", noun: "income" };
+  return { past: "spent", noun: "expense" };
+}
+
 function buildHeadline(
   f: QueryFilters,
   total: number,
@@ -221,25 +232,26 @@ function buildHeadline(
   const range = rangeLabel(f.range);
   const where =
     categoryFilterLabel(f.categoryName) + merchantFilterLabel(f.merchant);
+  const verb = verbFor(f.direction);
 
   if (f.kind === "biggest") {
     if (rowCount === 0 || total === null) {
-      return `No expenses found${where ? ` ${where.trim()}` : ""} ${range}.`;
+      return `No ${verb.noun}s found${where ? ` ${where.trim()}` : ""} ${range}.`;
     }
-    return `Biggest ${range}: ${money(total)}${where} — ${rowCount === 1 ? "1 expense" : `${rowCount} expenses`}.`;
+    return `Biggest ${range}: ${money(total)}${where} — ${rowCount === 1 ? `1 ${verb.noun}` : `${rowCount} ${verb.noun}s`}.`;
   }
   if (f.kind === "list") {
     const limit = f.limit ?? rowCount;
     if (rowCount === 0) {
-      return `No expenses found${where ? ` ${where.trim()}` : ""} ${range}.`;
+      return `No ${verb.noun}s found${where ? ` ${where.trim()}` : ""} ${range}.`;
     }
-    return `Last ${Math.min(limit, rowCount)} expenses${where} ${range}.`;
+    return `Last ${Math.min(limit, rowCount)} ${verb.noun}s${where} ${range}.`;
   }
   // sum
   if (rowCount === 0) {
-    return `You haven't spent anything${where ? ` ${where.trim()}` : ""} ${range}.`;
+    return `You haven't ${verb.past} anything${where ? ` ${where.trim()}` : ""} ${range}.`;
   }
-  return `You spent ${money(total)}${where} ${range}.`;
+  return `You ${verb.past} ${money(total)}${where} ${range}.`;
 }
 
 function buildSpoken(
@@ -250,18 +262,19 @@ function buildSpoken(
   const range = rangeLabel(f.range);
   const where =
     categoryFilterLabel(f.categoryName) + merchantFilterLabel(f.merchant);
+  const verb = verbFor(f.direction);
 
   if (f.kind === "biggest") {
     if (rowCount === 0 || total === null) {
-      return `You have no expenses${where} ${range}.`;
+      return `You have no ${verb.noun}s${where} ${range}.`;
     }
-    return `Your biggest expense${where} ${range} was ${money(total)}.`;
+    return `Your biggest ${verb.noun}${where} ${range} was ${money(total)}.`;
   }
   if (f.kind === "list") {
-    return `${rowCount} expenses${where} ${range}. Want details?`;
+    return `${rowCount} ${verb.noun}s${where} ${range}. Want details?`;
   }
   if (rowCount === 0) {
-    return `You haven't spent anything${where} ${range}.`;
+    return `You haven't ${verb.past} anything${where} ${range}.`;
   }
-  return `You spent ${money(total)}${where} ${range}.`;
+  return `You ${verb.past} ${money(total)}${where} ${range}.`;
 }
