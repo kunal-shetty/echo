@@ -2,43 +2,48 @@
 
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ListFilter, Mic, Search } from "lucide-react";
+import { ListFilter, Mic, PencilLine, Search } from "lucide-react";
 import { type Transaction } from "@/lib/schema";
 import { Header } from "@/components/home/header";
 import { TransactionRow } from "@/components/transaction-row";
+import { useCategories } from "@/lib/use-categories";
 
-const FILTERS = [
-  "All",
-  "Groceries",
-  "Entertainment",
-  "Transport",
-  "Food & Drink",
-  "Shopping",
-];
+const ALL_FILTER = "All";
 
 export function ActivityScreen({
   onVoice,
+  onAddManually,
   expenses,
   loading,
   configured,
   scrolled,
+  onRowClick,
 }: {
   onVoice: () => void;
+  onAddManually?: () => void;
   expenses: Transaction[];
   loading: boolean;
   configured: boolean;
   scrolled: boolean;
+  onRowClick?: (item: Transaction) => void;
 }) {
+  const cats = useCategories();
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("All");
+  const [filter, setFilter] = useState<string>(ALL_FILTER);
+
+  const FILTERS = useMemo(
+    () => [ALL_FILTER, ...cats.categories.map((c) => c.name)],
+    [cats.categories],
+  );
+
   const filtered = useMemo(
     () =>
       expenses.filter((item) => {
-        const haystack = `${item.merchantRaw} ${item.categoryId ?? ""}`.toLowerCase();
+        const haystack = `${item.merchantRaw} ${item.categoryName ?? ""}`.toLowerCase();
         const matchesQuery = haystack.includes(query.toLowerCase());
-        const catLabel = item.categoryId?.replace("cat-", "") ?? "";
+        const catLabel = item.categoryName ?? "";
         const matchesFilter =
-          filter === "All" ||
+          filter === ALL_FILTER ||
           catLabel.toLowerCase() === filter.toLowerCase();
         return matchesQuery && matchesFilter;
       }),
@@ -52,7 +57,11 @@ export function ActivityScreen({
       <Header screen="activity" onVoice={onVoice} scrolled={scrolled} />
       <main className="flex flex-col gap-5 px-5 pb-28">
         {empty ? (
-          <EmptyActivity onVoice={onVoice} configured={configured} />
+          <EmptyActivity
+            onVoice={onVoice}
+            onAddManually={onAddManually}
+            configured={configured}
+          />
         ) : (
           <>
             <div className="search-box">
@@ -99,7 +108,12 @@ export function ActivityScreen({
                 className="divide-y divide-border rounded-2xl bg-surface-1 px-3"
               >
                 {filtered.map((item, i) => (
-                  <TransactionRow item={item} index={i} key={item.id} />
+                  <TransactionRow
+                    item={item}
+                    index={i}
+                    key={item.id}
+                    onClick={onRowClick}
+                  />
                 ))}
                 {filtered.length === 0 && !empty && (
                   <motion.div
@@ -123,9 +137,11 @@ export function ActivityScreen({
 
 function EmptyActivity({
   onVoice,
+  onAddManually,
   configured,
 }: {
   onVoice: () => void;
+  onAddManually?: () => void;
   configured: boolean;
 }) {
   return (
@@ -149,6 +165,17 @@ function EmptyActivity({
         <Mic size={17} />
         Add your first memory
       </motion.button>
+      {onAddManually && (
+        <motion.button
+          type="button"
+          className="secondary-button mt-1"
+          onClick={onAddManually}
+          whileTap={{ scale: 0.97 }}
+        >
+          <PencilLine size={15} />
+          Or add it manually
+        </motion.button>
+      )}
       {!configured && (
         <p className="mt-2 max-w-xs text-xs text-muted-foreground">
           Backend isn&apos;t configured. Memories stay on this device for now.
