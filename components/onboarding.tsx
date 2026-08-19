@@ -161,6 +161,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       icon: (merchantValue || "E").charAt(0).toUpperCase(),
       tone: cat?.tone ?? "neutral",
       date: "Today, just now",
+      categoryName: cat?.name ?? null,
     };
   };
 
