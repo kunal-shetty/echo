@@ -16,6 +16,7 @@ export function HomeScreen({
   configured,
   scrolled,
   user,
+  onRowClick,
 }: {
   setScreen: (s: Screen) => void;
   onVoice: () => void;
@@ -24,6 +25,7 @@ export function HomeScreen({
   configured: boolean;
   scrolled: boolean;
   user: UserInfo;
+  onRowClick?: (item: Transaction) => void;
 }) {
   const empty = !loading && expenses.length === 0;
   return (
@@ -100,7 +102,7 @@ export function HomeScreen({
             </div>
             <div className="divide-y divide-border rounded-2xl bg-surface-1 px-3">
               {expenses.slice(0, 4).map((item, i) => (
-                <TransactionRow item={item} index={i} key={item.id} />
+                <TransactionRow item={item} index={i} key={item.id} onClick={onRowClick} />
               ))}
             </div>
           </>
