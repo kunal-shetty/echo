@@ -11,8 +11,9 @@ import { getDeviceUserId } from "@/lib/server/user";
 
 export const runtime = "nodejs";
 
-/** Fields a client may edit. Everything else is immutable — direction
- *  and source are intentionally excluded per product decision. */
+/** Fields a client may edit. Everything else is immutable — source
+ *  is intentionally excluded per product decision. Direction is
+ *  editable so the user can flip a memory between expense/income. */
 const ALLOWED_KEYS = new Set([
   "amount_minor",
   "currency",
@@ -21,6 +22,7 @@ const ALLOWED_KEYS = new Set([
   "category_id",
   "note",
   "transacted_at",
+  "direction",
 ]);
 
 const FORBIDDEN_KEYS = new Set([
@@ -33,7 +35,6 @@ const FORBIDDEN_KEYS = new Set([
   "raw_transcript",
   "clarified",
   "deleted_at",
-  "direction",
 ]);
 
 interface PatchBody {
@@ -44,6 +45,7 @@ interface PatchBody {
   category_id?: string | null;
   note?: string | null;
   transacted_at?: string;
+  direction?: "expense" | "income";
 }
 
 function isUuid(s: string): boolean {
@@ -165,6 +167,15 @@ export async function PATCH(
       );
     }
     body.transacted_at = d.toISOString();
+  }
+  if (raw.direction !== undefined) {
+    if (raw.direction !== "expense" && raw.direction !== "income") {
+      return NextResponse.json(
+        { error: "direction must be 'expense' or 'income'" },
+        { status: 400 },
+      );
+    }
+    body.direction = raw.direction;
   }
 
   if (Object.keys(body).length === 0) {
