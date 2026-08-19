@@ -1,5 +1,6 @@
 import type { Category, Transaction } from "@/lib/schema";
-import type { DbCategory, DbTransaction } from "@/lib/server/categories";
+import type { DbCategory } from "@/lib/server/categories";
+import type { DbTransaction } from "@/lib/server/transactions";
 
 const DEFAULT_TONE: Transaction["tone"] = "neutral";
 
