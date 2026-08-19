@@ -11,6 +11,10 @@ import { HomeScreen } from "@/components/home/home-screen";
 import { ActivityScreen } from "@/components/activity/activity-screen";
 import { InsightsScreen } from "@/components/insights/insights-screen";
 import { ProfileScreen } from "@/components/profile/profile-screen";
+import { Fab } from "@/components/fab";
+import { ManualAddSheet } from "@/components/manual-add-sheet";
+import { BulkAddSheet } from "@/components/bulk-add-sheet";
+import { CategorySheet } from "@/components/category-sheet";
 import { useTransactions } from "@/lib/use-transactions";
 import type { Screen, Transaction } from "@/lib/schema";
 
@@ -23,6 +27,8 @@ const DEFAULT_USER: UserInfo = {
   reminderTime: "evening",
 };
 
+type AddMode = "single" | "bulk" | "category" | null;
+
 export function EchoApp() {
   const [ready, setReady] = useState(false);
   const [onboarded, setOnboarded] = useState(false);
@@ -31,6 +37,8 @@ export function EchoApp() {
   const [toast, setToast] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
   const [user, setUser] = useState<UserInfo>(DEFAULT_USER);
+  const [addMode, setAddMode] = useState<AddMode>(null);
+  const [editing, setEditing] = useState<Transaction | null>(null);
   const tx = useTransactions();
 
   // Hydrate onboarding + user from localStorage on mount.
@@ -183,15 +191,18 @@ export function EchoApp() {
                   configured={tx.configured}
                   scrolled={scrolled}
                   user={user}
+                  onRowClick={(item) => setEditing(item)}
                 />
               )}
               {screen === "activity" && (
                 <ActivityScreen
                   onVoice={() => setVoiceOpen(true)}
+                  onAddManually={() => setAddMode("single")}
                   expenses={tx.transactions}
                   loading={tx.loading}
                   configured={tx.configured}
                   scrolled={scrolled}
+                  onRowClick={(item) => setEditing(item)}
                 />
               )}
               {screen === "insights" && (
@@ -225,6 +236,57 @@ export function EchoApp() {
           onSave={persistExpense}
           onUpdated={handleUpdated}
           onDeleted={handleDeleted}
+        />
+        <ManualAddSheet
+          open={addMode === "single"}
+          mode="add"
+          onClose={() => setAddMode(null)}
+          onSaved={(saved) => {
+            setAddMode(null);
+            setToast(`Saved · ${saved.merchantRaw}`);
+          }}
+        />
+        <ManualAddSheet
+          open={editing != null}
+          mode="edit"
+          initial={editing ?? undefined}
+          onClose={() => setEditing(null)}
+          onSaved={(saved) => {
+            setEditing(null);
+            setToast(`Updated · ${saved.merchantRaw}`);
+          }}
+        />
+        <BulkAddSheet
+          open={addMode === "bulk"}
+          onClose={() => setAddMode(null)}
+          onComplete={(inserted, failures) => {
+            setAddMode(null);
+            if (inserted === 0) {
+              setToast("Nothing imported");
+            } else if (failures > 0) {
+              setToast(
+                `Imported ${inserted} ${inserted === 1 ? "memory" : "memories"} (${failures} skipped)`,
+              );
+            } else {
+              setToast(
+                `Imported ${inserted} ${inserted === 1 ? "memory" : "memories"}`,
+              );
+            }
+          }}
+        />
+        <CategorySheet
+          open={addMode === "category"}
+          onClose={() => setAddMode(null)}
+          onSaved={(cat) => {
+            setAddMode(null);
+            setToast(`Saved · ${cat.name}`);
+          }}
+        />
+        <Fab
+          visible={screen === "home" || screen === "activity"}
+          onPickSingle={() => setAddMode("single")}
+          onPickBulk={() => setAddMode("bulk")}
+          onPickCategory={() => setAddMode("category")}
         />
         <Toast message={toast} onDismiss={() => setToast(null)} />
       </div>
