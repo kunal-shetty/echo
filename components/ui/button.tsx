@@ -1,3 +1,9 @@
+/**
+ * @file button.tsx
+ * @description Generic button component using class-variance-authority for styling.
+ * Provides multiple variants (default, outline, ghost, etc.) and sizes.
+ */
+
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cva, type VariantProps } from "class-variance-authority";
 
@@ -40,6 +46,10 @@ const buttonVariants = cva(
   },
 );
 
+/**
+ * A versatile button component that supports various visual styles
+ * and sizes via the `variant` and `size` props.
+ */
 function Button({
   className,
   variant = "default",
