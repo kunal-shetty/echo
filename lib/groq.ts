@@ -1,4 +1,5 @@
 import type { ParseResult, RecentTransactionContext } from "@/lib/parse";
+import type { QueryResult } from "@/lib/server/queries";
 
 // Groq's chat completion endpoint. Uses an OpenAI-compatible schema.
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -23,11 +24,11 @@ function buildSystemPrompt(now: Date): string {
   const today = formatHumanDate(todayIso);
   const yesterday = formatHumanDate(yesterdayIso);
 
-  return `You are the parser for Echo, a voice-first finance tracker for INR.
+  return \`You are the parser for Echo, a voice-first finance tracker for INR.
 
 ## Time context
-- Today is: ${today}
-- Yesterday was: ${yesterday}
+- Today is: \${today}
+- Yesterday was: \${yesterday}
 - All "transacted_at" timestamps you emit must be ISO 8601 in UTC.
   * "today" → start of today in user's timezone, or "now" if the user didn't specify a time.
   * "yesterday" → start of yesterday in user's timezone.
@@ -138,6 +139,66 @@ Respond with STRICT JSON only. No commentary, no markdown, no code fences.
   * 0.7–1.0 → confident. UI auto-saves.`;
 }
 
+/**
+ * Turns a raw query result into a conversational, intelligent response.
+ * Uses Groq to add a 'nugget' of financial reasoning or coaching.
+ */
+export async function generateReasonedResponse(
+  transcript: string,
+  result: QueryResult,
+  history: any[] = [],
+  apiKey: string,
+): Promise<string> {
+  const system = \`You are Echo, a concise and encouraging finance coach.
+Your goal is to answer the user's query using the provided data, but add a "nugget" of intelligence or a helpful observation.
+
+Rules:
+- Be extremely concise (max 2 sentences) because this will be spoken via TTS.
+- Be natural and conversational.
+- Use the provided data accurately.
+- Add a small insight: a comparison, a warning, or a compliment about their spending.
+- If the result is empty, be encouraging but honest.
+
+Example:
+User: "How much did I spend on coffee?"
+Data: { total: 1200, range: "this_month", rows: [...] }
+Response: "You've spent ₹1,200 on coffee this month. That's a bit more than usual—maybe try a few more home-brews?"\`;
+
+  const dataContext = JSON.stringify({
+    transcript,
+    result,
+    history,
+  });
+
+  const res = await fetch(GROQ_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: \`Bearer \${apiKey}\`,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content: \`User said: "\${transcript}"\\nData: \${dataContext}\\n\\nWhat is the natural, reasoned response?\`,
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(\`Groq response failed: \${res.status}\`);
+  }
+
+  const json = (await res.json()) as {
+    choices: Array<{ message: { content: string } }>;
+  };
+  return json.choices?.[0]?.message?.content?.trim() ?? "I'm not sure how to answer that right now.";
+}
+
 interface GroqParseResponse {
   action?: string;
   amount?: number | null;
@@ -173,20 +234,20 @@ export async function parseTranscript(
 
   const recentBlock =
     options.recent && options.recent.length > 0
-      ? `\n\n## Recent transactions (newest first)\nUse these to identify update/delete targets:\n` +
+      ? \`\\n\\n## Recent transactions (newest first)\\nUse these to identify update/delete targets:\\n\` +
         options.recent
           .map(
             (r, i) =>
-              `${i + 1}. id="${r.id}" · ${formatHumanDate(r.transactedAt)} · ${r.merchantRaw} · ${r.amount}`,
+              \${i + 1}. id="\${r.id}" · \${formatHumanDate(r.transactedAt)} · \${r.merchantRaw} · \${r.amount}\`,
           )
-          .join("\n")
-      : "\n\n(No recent transactions — the user has no edit/delete targets available.)";
+          .join("\\n")
+      : "\\n\\n(No recent transactions — the user has no edit/delete targets available.)";
 
   const res = await fetch(GROQ_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: \`Bearer \${apiKey}\`,
     },
     body: JSON.stringify({
       model: MODEL,
@@ -196,7 +257,7 @@ export async function parseTranscript(
         { role: "system", content: system + recentBlock },
         {
           role: "user",
-          content: `Transcript: "${transcript}"\n\nReturn JSON only.`,
+          content: \`Transcript: "\${transcript}"\\n\\nReturn JSON only.\`,
         },
       ],
     }),
@@ -204,7 +265,7 @@ export async function parseTranscript(
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(`Groq ${res.status}: ${detail.slice(0, 240)}`);
+    throw new Error(\`Groq \${res.status}: \${detail.slice(0, 240)}\`);
   }
 
   const json = (await res.json()) as {
@@ -216,7 +277,7 @@ export async function parseTranscript(
   try {
     parsed = JSON.parse(content) as GroqParseResponse;
   } catch {
-    throw new Error(`Groq returned non-JSON: ${content.slice(0, 200)}`);
+    throw new Error(\`Groq returned non-JSON: \${content.slice(0, 200)}\`);
   }
 
   const action = normalizeAction(parsed.action);
