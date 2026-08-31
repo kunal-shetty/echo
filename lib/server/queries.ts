@@ -1,3 +1,10 @@
+/**
+ * @file queries.ts
+ * @description Server-side query engine for financial transactions.
+ * Handles the resolution of relative date ranges, merchant/category filtering,
+ * and the generation of conversational headlines for the Voice AI.
+ */
+
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 import { getDeviceUserId } from "@/lib/server/user";
 import type { QueryKind, QueryRange } from "@/lib/parse";
@@ -7,17 +14,25 @@ import { listSystemCategories } from "@/lib/server/categories";
 import { money } from "@/lib/fmt";
 
 export interface QueryFilters {
+  /** The type of aggregation: "sum", "biggest", or "list". */
   kind: QueryKind;
+  /** The relative date range (e.g., "today", "this_month"). */
   range: QueryRange | null;
+  /** Filter by category name (resolved server-side). */
   categoryName: string | null;
+  /** Filter by merchant name (fuzzy match). */
   merchant: string | null;
+  /** Maximum number of rows to return (relevant for "list"). */
   limit: number | null;
   /** Restrict to a specific direction. Null = both. */
   direction: "expense" | "income" | null;
 }
 
+/** The structured result of a financial query, including conversational summaries. */
 export interface QueryResult {
+  /** The original query kind. */
   kind: QueryKind;
+  /** The resolved range used for the query. */
   range: QueryRange;
   /** Human-readable headline ("Spent ₹3,420 on food this month.") */
   headline: string;
@@ -126,6 +141,14 @@ function categoryFilterLabel(category: string | null): string {
   return ` on ${category.toLowerCase()}`;
 }
 
+/**
+ * Executes a financial query against the database based on the provided filters.
+ * Resolves date ranges to UTC timestamps, maps category names to IDs, and
+ * computes the total or finds the biggest transaction.
+ * @param filters The query constraints.
+ * @returns A QueryResult containing the data and human-readable summaries.
+ * @throws Error if no device identity is found.
+ */
 export async function runQuery(
   filters: QueryFilters,
 ): Promise<QueryResult> {
