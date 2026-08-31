@@ -1,3 +1,10 @@
+/**
+ * @file route.ts
+ * @description Audio transcription API.
+ * Acts as a proxy between the client and the Groq Whisper API, converting
+ * raw audio blobs into text transcripts.
+ */
+
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -8,6 +15,11 @@ const GROQ_TRANSCRIBE_URL =
 const WHISPER_MODEL =
   process.env.GROQ_WHISPER_MODEL ?? "whisper-large-v3-turbo";
 
+/**
+ * POST /api/transcribe
+ * Receives a multipart/form-data request containing an audio file.
+ * Forwards the file to Groq's Whisper API and returns the transcription.
+ */
 export async function POST(req: Request) {
   let form: FormData;
   try {
