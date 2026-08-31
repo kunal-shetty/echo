@@ -1,24 +1,34 @@
+/**
+ * @file amount-stepper.tsx
+ * @description UI component for numeric amount input with animated increments.
+ * Combines an animated display with stepper buttons and a text input field.
+ */
+
 "use client";
 
 import { motion, useMotionValue, useTransform, animate } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 interface AmountStepperProps {
+  /** Current numeric value. */
   value: number;
+  /** Callback when value changes. */
   onChange: (value: number) => void;
+  /** Currency code to display (e.g., 'INR', 'USD'). */
   currency?: string;
-  /** Step for the + / - buttons. */
+  /** Step increment/decrement for the buttons. */
   step?: number;
-  /** Min/max bound, optional. */
+  /** Minimum allowed value. */
   min?: number;
+  /** Maximum allowed value. */
   max?: number;
+  /** Optional label to display above the input. */
   label?: string;
 }
 
 /**
- * Large currency input. Looks like Apple Wallet's amount field.
- * The numeric value is animated with motion's `animate()` so changes feel
- * smooth rather than jump-cutting.
+ * Large currency input with an animated display and stepper buttons.
+ * Designed to feel like a native wallet application.
  */
 export function AmountStepper({
   value,
