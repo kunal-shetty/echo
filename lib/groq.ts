@@ -1,3 +1,10 @@
+/**
+ * @file groq.ts
+ * @description Integration layer for Groq LLM.
+ * Handles intent parsing of voice transcripts and the generation of
+ * conversational financial insights (Reasoned Responses).
+ */
+
 import type { ParseResult, RecentTransactionContext } from "@/lib/parse";
 import type { QueryResult } from "@/lib/server/queries";
 
@@ -141,7 +148,12 @@ Respond with STRICT JSON only. No commentary, no markdown, no code fences.
 
 /**
  * Turns a raw query result into a conversational, intelligent response.
- * Uses Groq to add a 'nugget' of financial reasoning or coaching.
+ * Uses Groq to add a 'nugget' of financial reasoning or coaching based on the data.
+ * @param transcript The original user utterance.
+ * @param result The raw data result from runQuery.
+ * @param history Conversation history for context.
+ * @param apiKey The Groq API key.
+ * @returns A short, natural, reasoned response for TTS output.
  */
 export async function generateReasonedResponse(
   transcript: string,
@@ -224,6 +236,16 @@ export interface ParseOptions {
   recent?: RecentTransactionContext[];
 }
 
+/**
+ * Analyzes a voice transcript to extract a structured financial intent.
+ * Uses a comprehensive system prompt to classify the action (create, update, delete, query)
+ * and extract relevant entities like amount, merchant, and date.
+ * @param transcript The user's spoken utterance.
+ * @param apiKey The Groq API key.
+ * @param options Optional context, such as recent transactions for resolving update targets.
+ * @returns A structured ParseResult.
+ * @throws Error if the LLM response is invalid or the API call fails.
+ */
 export async function parseTranscript(
   transcript: string,
   apiKey: string,
