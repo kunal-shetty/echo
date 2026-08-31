@@ -1,3 +1,10 @@
+/**
+ * @file start/route.ts
+ * @description Entry point for the OTP (One-Time Password) authentication flow.
+ * Validates the email address, generates a unique numeric code, stores it in the
+ * database, and sends it to the user via the Resend email service.
+ */
+
 import { NextResponse } from "next/server";
 import { getOrCreateUserRow } from "@/lib/server/user";
 import {
@@ -11,6 +18,10 @@ export const runtime = "nodejs";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Handles the initial request to send an OTP.
+ * Flow: Validate Email $\to$ Ensure User Row $\to$ Check Config $\to$ Generate $\to$ Store $\to$ Send.
+ */
 export async function POST(req: Request) {
   let body: { email?: string };
   try {
@@ -26,7 +37,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // Make sure the current device has a user row even if they've never
+  // Ensure the current device has a user row even if they've never
   // explicitly logged in — otherwise verify can't find anything to update.
   const user = await getOrCreateUserRow();
 
