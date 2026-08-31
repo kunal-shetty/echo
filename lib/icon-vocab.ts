@@ -1,7 +1,8 @@
-// Fixed lucide-react icon vocabulary Echo allows for category icons.
-// Seeded system categories use a subset of these (`schema.sql:538-546`).
-// We keep this list flat so both server validation and the UI picker
-// can import the same source of truth.
+/**
+ * @file icon-vocab.ts
+ * @description Fixed vocabulary of Lucide-react icon names allowed for categories.
+ * This list is shared between server-side validation and the frontend icon picker.
+ */
 
 export const ICON_VOCAB = [
   // 7 seeded system categories
@@ -25,8 +26,14 @@ export const ICON_VOCAB = [
   "HeartPulse",
 ] as const;
 
+/** Type representing a valid icon name from the vocabulary. */
 export type IconName = (typeof ICON_VOCAB)[number];
 
+/**
+ * Validates if a given string is a supported icon name.
+ * @param name The icon name to check.
+ * @returns True if the name is in the ICON_VOCAB.
+ */
 export function isIconName(name: string): name is IconName {
   return (ICON_VOCAB as readonly string[]).includes(name);
 }
