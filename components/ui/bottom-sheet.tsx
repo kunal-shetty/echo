@@ -1,3 +1,9 @@
+/**
+ * @file bottom-sheet.tsx
+ * @description A sliding panel component that emerges from the bottom of the screen.
+ * Supports drag-to-dismiss gestures and accessibility standards for modal dialogs.
+ */
+
 "use client";
 
 import {
@@ -12,10 +18,15 @@ import { AnimatePresence, motion, useDragControls } from "motion/react";
 import { FADE, SPRING_SHEET } from "@/lib/motion";
 
 interface BottomSheetProps {
+  /** Control whether the sheet is visible. */
   open: boolean;
+  /** Callback to trigger when the sheet is dismissed. */
   onClose: () => void;
+  /** Optional heading for the sheet. */
   title?: string;
+  /** Optional small text displayed above the title. */
   subtitle?: string;
+  /** Content to be rendered inside the sheet. */
   children: ReactNode;
   /** Hide the drag handle. Defaults to false. */
   hideHandle?: boolean;
@@ -23,6 +34,10 @@ interface BottomSheetProps {
   disableDrag?: boolean;
 }
 
+/**
+ * A gesture-enabled modal panel that slides up from the bottom.
+ * Handles body scroll locking and ESC key dismissal.
+ */
 export function BottomSheet({
   open,
   onClose,
