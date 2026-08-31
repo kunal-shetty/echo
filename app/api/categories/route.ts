@@ -1,3 +1,9 @@
+/**
+ * @file route.ts
+ * @description Categories API.
+ * Handles listing available categories and creating new user-defined categories.
+ */
+
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
 import {
@@ -9,6 +15,10 @@ import { getDeviceUserId } from "@/lib/server/user";
 
 export const runtime = "nodejs";
 
+/**
+ * GET /api/categories
+ * Returns a list of system categories and any custom categories created by the user.
+ */
 export async function GET() {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ categories: [], configured: false });
@@ -43,6 +53,11 @@ const TONES = new Set([
   "neutral",
 ]);
 
+/**
+ * POST /api/categories
+ * Creates a new custom category for the current user.
+ * Validates the category name, icon, and tone before insertion.
+ */
 export async function POST(req: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
