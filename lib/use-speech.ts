@@ -1,27 +1,51 @@
+/**
+ * @file use-speech.ts
+ * @description Custom hook for managing voice capture, Voice Activity Detection (VAD),
+ * and audio transcription integration. Handles the lifecycle of MediaRecorder
+ * and audio analysis for automatic stop-on-silence.
+ */
+
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface UseSpeechOptions {
+  /** Callback triggered when transcription is finalized. */
   onFinal?: (transcript: string) => void;
+  /** Callback triggered during interim transcription updates. */
   onInterim?: (transcript: string) => void;
+  /** BCP-47 language code (e.g., 'en', 'hi'). Defaults to 'en'. */
   lang?: string;
+  /** Time in ms of near-silence before recording automatically stops. */
   silenceMs?: number;
+  /** Hard limit on recording duration in ms. */
   maxMs?: number;
 }
 
 interface UseSpeechReturn {
+  /** True if the browser supports necessary MediaDevices and MediaRecorder APIs. */
   supported: boolean;
+  /** True if the microphone is currently active and recording. */
   listening: boolean;
+  /** The most recent transcript generated. */
   transcript: string;
+  /** Error message if capture or transcription fails. */
   error: string | null;
+  /** Starts the recording and VAD process. */
   start: () => void;
+  /** Stops recording and triggers transcription. */
   stop: () => void;
+  /** Resets state and clears transcripts. */
   reset: () => void;
 }
 
-// VAD + MediaRecorder capture. Audio is sent to /api/transcribe (Groq Whisper).
-// Auto-stops after `silenceMs` of near-silence, or after `maxMs` total, whichever comes first.
+/**
+ * Hook for high-fidelity voice capture with automatic silence detection.
+ *
+ * The hook uses a hybrid approach:
+ * 1. MediaRecorder for audio blob capture.
+ * 2. Web Audio API (AnalyserNode) for real-time RMS amplitude monitoring (VAD).
+ */
 export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
   const {
     onFinal,
@@ -102,7 +126,6 @@ export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
       return;
     }
 
-    // Prefer the mimeType the recorder produced so the file extension matches.
     const mimeType = rec.mimeType || "audio/webm";
     const ext = mimeType.includes("mp4")
       ? "mp4"
@@ -136,7 +159,6 @@ export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
         setTranscript(text);
         onFinalRef.current?.(text);
       } else if (durationMs < 600) {
-        // Whisper on near-silent audio returns empty. Surface as a soft error.
         setError("Didn't catch that. Try again.");
         onFinalRef.current?.("");
       }
@@ -180,7 +202,6 @@ export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          // Phone-call grade is plenty for short utterances and keeps uploads tiny.
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
@@ -204,7 +225,6 @@ export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
     stoppedRef.current = false;
     startedAtRef.current = Date.now();
 
-    // Pick a supported mimeType; Whisper accepts all of these.
     const candidates = [
       "audio/webm;codecs=opus",
       "audio/webm",
@@ -245,7 +265,6 @@ export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
       setListening(false);
     };
 
-    // Set up VAD via AnalyserNode (RMS over time domain).
     try {
       const Ctx =
         window.AudioContext ||
@@ -262,16 +281,22 @@ export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
       const buffer = new Uint8Array(analyser.fftSize);
       let speechStarted = false;
 
+      /**
+       * VAD Analysis Loop:
+       * Runs on every animation frame to calculate the Root Mean Square (RMS)
+       * of the audio time-domain data. RMS provides a measure of average
+       * signal power, which we use to distinguish speech from silence.
+       */
       const tick = () => {
         if (!analyserRef.current || stoppedRef.current) return;
         analyser.getByteTimeDomainData(buffer);
         let sumSquares = 0;
         for (let i = 0; i < buffer.length; i++) {
-          const v = (buffer[i] - 128) / 128;
+          const v = (buffer[i] - 128) / 128; // Normalize 8-bit sample to [-1, 1]
           sumSquares += v * v;
         }
         const rms = Math.sqrt(sumSquares / buffer.length);
-        const isSpeech = rms > 0.04;
+        const isSpeech = rms > 0.04; // Fixed threshold for "speech" activity
 
         if (isSpeech) {
           speechStarted = true;
@@ -281,6 +306,7 @@ export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
             silenceTimerRef.current = null;
           }
         } else if (speechStarted && !silenceTimerRef.current) {
+          // Trigger auto-stop if we've had speech and now see silence for silenceMs.
           silenceTimerRef.current = setTimeout(() => {
             try {
               if (rec.state !== "inactive") rec.stop();
@@ -296,7 +322,6 @@ export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
       // VAD is a nice-to-have; recording still works without it.
     }
 
-    // Hard cap — never record more than maxMs.
     maxTimerRef.current = setTimeout(
       () => {
         try {
@@ -309,7 +334,7 @@ export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
     );
 
     try {
-      rec.start(250); // emit chunks every 250ms so large captures don't OOM
+      rec.start(250);
       mediaRecorderRef.current = rec;
       setListening(true);
     } catch (e) {
@@ -325,7 +350,6 @@ export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
     setError(null);
   }, []);
 
-  // Release the mic if the component unmounts mid-recording.
   useEffect(() => {
     return () => {
       stoppedRef.current = true;
