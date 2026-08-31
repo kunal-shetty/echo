@@ -35,37 +35,6 @@ interface AskResponse {
 }
 
 /**
- * Determines the default query kind based on keywords in the transcript.
- * Fallback for when the LLM doesn't explicitly specify a kind.
- * @param transcript The raw user utterance.
- * @returns The inferred QueryKind.
- */
-function defaultKindForQuery(transcript: string): QueryKind {
-  const t = transcript.toLowerCase();
-  if (/(biggest|largest|most expensive)/.test(t)) return "biggest";
-  if (/(list|show me|what did i|recent)/.test(t)) return "list";
-  return "sum";
-}
-
-/** Best-guess direction when the parser didn't return one. We mirror the
- *  model cue list so spend-shaped queries get `expense` and
- *  income-shaped ones get `income` even if the parser mis-classified
- *  the action. */
-/**
- * Guesses whether a query is about income or expenses based on keywords.
- * Fallback for when the LLM doesn't explicitly specify a direction.
- * @param transcript The raw user utterance.
- * @returns The inferred direction.
- */
-function defaultDirectionForQuery(transcript: string): "expense" | "income" {
-  const t = transcript.toLowerCase();
-  if (/(earn|earned|income|salary|received|got paid|credit|cashback|refund|deposit)/.test(t)) {
-    return "income";
-  }
-  return "expense";
-}
-
-/**
  * POST /api/ask
  * The main entry point for user questions about their finances.
  * Uses Groq to parse the intent and a reasoning engine to generate
