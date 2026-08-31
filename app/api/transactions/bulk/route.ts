@@ -1,3 +1,11 @@
+/**
+ * @file route.ts
+ * @description Bulk transaction import API.
+ * Provides an endpoint for importing multiple transactions at once,
+ * handling default account resolution, currency normalization,
+ * and best-effort insertion of valid rows.
+ */
+
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured, getSupabaseAdmin } from "@/lib/server/supabase";
 import {
@@ -56,6 +64,57 @@ interface ValidatedRow {
   };
 }
 
+export const runtime = "nodejs";
+
+const MAX_ROWS = 500;
+
+interface BulkRowIn {
+  date?: string | null;
+  amount_minor?: number;
+  currency?: string;
+  merchant_raw?: string;
+  merchant_canonical?: string | null;
+  category_id?: string | null;
+  category_name?: string | null;
+  note?: string | null;
+  direction?: "expense" | "income" | "transfer";
+}
+
+interface BulkBody {
+  rows?: BulkRowIn[];
+}
+
+interface ParsedRow extends BulkTransactionInsert {
+  rowIndex: number;
+}
+
+interface RowFailure {
+  rowIndex: number;
+  error: string;
+}
+
+interface ValidatedRow {
+  rowIndex: number;
+  parsed: Omit<BulkTransactionInsert, "account_id" | "currency" | "category_id" | "merchant_canonical" | "note" | "confidence" | "raw_transcript" | "clarified" | "source" | "direction"> & {
+    account_id: string;
+    currency: string;
+    category_id: string | null;
+    merchant_canonical: string | null;
+    note: string | null;
+    confidence: number | null;
+    raw_transcript: string | null;
+    clarified: boolean;
+    source: BulkTransactionInsert["source"];
+    direction: BulkTransactionInsert["direction"];
+  };
+}
+
+/**
+ * Parses a date string into an ISO 8601 timestamp.
+ * Accepts YYYY-MM-DD (normalized to midnight UTC) or any valid Date string.
+ * @param s The date string to parse.
+ * @returns ISO timestamp or null if invalid.
+ */
 function parseDate(s: string | null | undefined): string | null {
   if (!s) return null;
   // Accept YYYY-MM-DD or full ISO; reject anything else.
@@ -70,6 +129,12 @@ function parseDate(s: string | null | undefined): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/**
+ * POST /api/transactions/bulk
+ * Imports multiple transactions in a single request.
+ * Resolves defaults (account, currency) and performs best-effort insertion,
+ * returning both the inserted transactions and a list of row failures.
+ */
 export async function POST(req: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
