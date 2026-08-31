@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Sparkles, Mic } from "lucide-react";
 import {
@@ -15,6 +15,7 @@ import {
   Tooltip,
 } from "recharts";
 import { Header } from "@/components/home/header";
+import { WrappedStory } from "./wrapped-story";
 import { type Transaction } from "@/lib/schema";
 import { moneyShort, shortMonth } from "@/lib/fmt";
 
@@ -31,6 +32,21 @@ export function InsightsScreen({
   configured: boolean;
   scrolled: boolean;
 }) {
+  const [insights, setInsights] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function fetchInsights() {
+      try {
+        const res = await fetch("/api/insights");
+        const data = await res.json();
+        if (data.insights) setInsights(data.insights);
+      } catch (e) {
+        // Silently fail for insights
+      }
+    }
+    fetchInsights();
+  }, []);
+
   const empty = !loading && expenses.length === 0;
   const { categoryData, monthlyData } = useMemo(
     () => buildSeries(expenses),
@@ -58,6 +74,7 @@ export function InsightsScreen({
           <EmptyInsights onVoice={onVoice} configured={configured} />
         ) : (
           <>
+            <WrappedStory insights={insights} />
             <ChartCard title="Spending mix" detail="Expenses · This month">
               <motion.div
                 className="flex items-center gap-4 py-3"
