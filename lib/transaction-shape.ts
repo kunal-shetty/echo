@@ -1,3 +1,10 @@
+/**
+ * @file transaction-shape.ts
+ * @description Translation layer that transforms database rows (DbTransaction)
+ * into UI-ready objects (Transaction). Handles category resolution, icon
+ * mapping, and date formatting.
+ */
+
 import type { Category, Transaction } from "@/lib/schema";
 import type { DbCategory } from "@/lib/server/categories";
 import type { DbTransaction } from "@/lib/server/transactions";
@@ -6,7 +13,11 @@ const DEFAULT_TONE: Transaction["tone"] = "neutral";
 
 const toneByCategory: Record<string, Transaction["tone"] | undefined> = {};
 
-// Build a quick lookup from a list of system categories.
+/**
+ * Creates a fast lookup map from a list of categories.
+ * @param cats List of system or user categories.
+ * @returns A map indexed by category ID.
+ */
 export function indexCategories(cats: DbCategory[] | Category[]): Map<
   string,
   DbCategory | Category
@@ -16,8 +27,13 @@ export function indexCategories(cats: DbCategory[] | Category[]): Map<
   return m;
 }
 
-/** DB row → UI Transaction. Picks icon/tone from category, falls back
- *  to merchant initial + neutral tone. Date is pre-formatted. */
+/**
+ * Transforms a DB transaction row into a UI-ready Transaction object.
+ * Resolves category metadata (icon, tone, name) and pre-formats the date.
+ * @param row The raw database row.
+ * @param categories A map of categories for metadata lookup.
+ * @returns A formatted Transaction object for use in components.
+ */
 export function toUiTransaction(
   row: DbTransaction,
   categories: Map<string, DbCategory | Category>,
@@ -50,7 +66,12 @@ export function toUiTransaction(
   };
 }
 
-/** Render "Today, 9:42 AM" / "Yesterday, 7:10 PM" / "Mon, 8:04 AM" etc. */
+/**
+ * Formats an ISO timestamp into a human-readable relative date.
+ * Examples: "Today, 9:42 AM", "Yesterday, 7:10 PM", "Mon, 8:04 AM".
+ * @param iso ISO 8601 timestamp.
+ * @returns Relative date string.
+ */
 export function formatRelative(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
