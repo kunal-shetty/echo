@@ -38,6 +38,7 @@ export function VoiceSheet({
   onUpdated,
   onDeleted,
 }: VoiceSheetProps) {
+  const [sessionId] = useState(() => Math.random().toString(36).substring(7));
   const { categories: rawCats } = useCategories();
   const categories = rawCats.map(toUiCategory);
   const [mode, setMode] = useState<CaptureMode>("listening");
@@ -76,7 +77,7 @@ export function VoiceSheet({
           const askRes = await fetch("/api/ask", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ transcript: text }),
+            body: JSON.stringify({ transcript: text, sessionId }),
           });
           const askData = (await askRes.json().catch(() => ({}))) as {
             result?: ParseResult;
@@ -141,7 +142,7 @@ export function VoiceSheet({
           const askRes = await fetch("/api/ask", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ transcript: text }),
+            body: JSON.stringify({ transcript: text, sessionId }),
           });
           const askData = (await askRes.json().catch(() => ({}))) as {
             query?: {
