@@ -1,3 +1,10 @@
+/**
+ * @file route.ts
+ * @description Transactions API.
+ * Handles retrieving the user's transaction history and manually creating
+ * new transactions.
+ */
+
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
 import {
@@ -10,6 +17,11 @@ import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
 
 export const runtime = "nodejs";
 
+/**
+ * GET /api/transactions
+ * Retrieves all transactions for the current user, along with the
+ * available categories for UI resolution.
+ */
 export async function GET() {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({
@@ -37,6 +49,11 @@ export async function GET() {
 
 // ... existing code ...
 
+/**
+ * POST /api/transactions
+ * Manually creates a new transaction.
+ * Validates amount and merchant before resolving the account and persisting to DB.
+ */
 export async function POST(req: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
