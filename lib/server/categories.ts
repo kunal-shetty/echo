@@ -1,5 +1,13 @@
+/**
+ * @file categories.ts
+ * @description Server-side logic for managing financial categories.
+ * Handles the coexistence of system-seeded categories (global) and
+ * user-defined custom categories.
+ */
+
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 
+/** Database representation of a category. */
 export interface DbCategory {
   id: string;
   user_id: string | null;
@@ -11,8 +19,11 @@ export interface DbCategory {
   sort_order: number;
 }
 
-/** Returns system categories only (user_id IS NULL). These are seeded
- *  in `schema.sql` and visible to all users. */
+/**
+ * Returns system categories only (where user_id is NULL).
+ * These are seeded in `schema.sql` and are visible to all users.
+ * @returns List of system categories sorted by sort_order.
+ */
 export async function listSystemCategories(): Promise<DbCategory[]> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -24,9 +35,12 @@ export async function listSystemCategories(): Promise<DbCategory[]> {
   return (data ?? []) as DbCategory[];
 }
 
-/** Returns system categories + this user's own categories, ordered by
- *  sort_order. Used by the categories API so the UI can offer both
- *  the seeded vocabulary and the user's custom additions. */
+/**
+ * Returns a merged list of system categories and the user's custom categories.
+ * Used by the categories API to populate the selection UI.
+ * @param userId The UUID of the user.
+ * @returns Combined list of categories sorted by sort_order.
+ */
 export async function listCategoriesForUser(
   userId: string,
 ): Promise<DbCategory[]> {
@@ -47,8 +61,13 @@ export interface CreateCategoryPatch {
   sort_order?: number;
 }
 
-/** Inserts a new category owned by `userId`. Throws on the unique
- *  (user_id, name) violation; routes map that to a 409. */
+/**
+ * Creates a new category owned by the specified user.
+ * Throws if the category name already exists for that user (Unique Constraint).
+ * @param userId The UUID of the user.
+ * @param patch Fields to populate for the new category.
+ * @returns The created category record.
+ */
 export async function createCategory(
   userId: string,
   patch: CreateCategoryPatch,
@@ -78,8 +97,13 @@ export interface UpdateCategoryPatch {
   sort_order?: number;
 }
 
-/** Updates a category owned by `userId`. Returns null if not found or
- *  not owned. Throws on a unique-constraint violation (route → 409). */
+/**
+ * Updates an existing category owned by the user.
+ * @param userId The UUID of the user.
+ * @param id The UUID of the category to update.
+ * @param patch Fields to update.
+ * @returns The updated category record, or null if not found/owned.
+ */
 export async function updateCategory(
   userId: string,
   id: string,
@@ -97,9 +121,13 @@ export async function updateCategory(
   return (data ?? null) as DbCategory | null;
 }
 
-/** Deletes a user-owned category. Returns true on success, false if
- *  the row didn't exist (or wasn't owned). Throws on FK violation —
- *  callers should pre-check or catch + map to 409. */
+/**
+ * Deletes a user-owned category.
+ * @param userId The UUID of the user.
+ * @param id The UUID of the category to delete.
+ * @returns True if the category was deleted, false otherwise.
+ * @throws If the category is referenced by transactions (FK violation).
+ */
 export async function deleteCategory(
   userId: string,
   id: string,
