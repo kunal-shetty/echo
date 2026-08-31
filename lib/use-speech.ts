@@ -22,6 +22,7 @@ interface UseSpeechOptions {
   maxMs?: number;
 }
 
+/** State and actions provided by the useSpeech hook. */
 interface UseSpeechReturn {
   /** True if the browser supports necessary MediaDevices and MediaRecorder APIs. */
   supported: boolean;
@@ -45,6 +46,9 @@ interface UseSpeechReturn {
  * The hook uses a hybrid approach:
  * 1. MediaRecorder for audio blob capture.
  * 2. Web Audio API (AnalyserNode) for real-time RMS amplitude monitoring (VAD).
+ *
+ * @param options Configuration for transcription callbacks, language, and silence timeouts.
+ * @returns A state object containing recording controls and transcription results.
  */
 export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
   const {
@@ -86,6 +90,7 @@ export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
     setSupported(ok);
   }, []);
 
+  /** Cleans up the Web Audio VAD pipeline and cancels all active timers. */
   const cleanupAnalyser = () => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
@@ -108,6 +113,7 @@ export function useSpeech(options: UseSpeechOptions = {}): UseSpeechReturn {
     analyserRef.current = null;
   };
 
+  /** Stops all tracks of the active media stream. */
   const stopStream = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
