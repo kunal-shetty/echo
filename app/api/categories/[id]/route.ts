@@ -1,3 +1,9 @@
+/**
+ * @file route.ts
+ * @description Individual category API.
+ * Handles updates and deletions of specific category records by ID.
+ */
+
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
 import {
@@ -26,6 +32,11 @@ const TONES = new Set([
   "neutral",
 ]);
 
+/**
+ * PATCH /api/categories/[id]
+ * Updates a specific category. Validates inputs and checks for
+ * naming collisions with other categories owned by the user.
+ */
 export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -103,6 +114,11 @@ export async function PATCH(
   }
 }
 
+/**
+ * DELETE /api/categories/[id]
+ * Deletes a specific category. Returns a 409 Conflict if the
+ * category is still referenced by transactions or budgets.
+ */
 export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
