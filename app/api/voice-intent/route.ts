@@ -1,3 +1,11 @@
+/**
+ * @file route.ts
+ * @description Voice intent orchestrator.
+ * This is the core of the "Voice-to-Action" pipeline. It takes a transcript,
+ * uses the LLM to parse it into an intent (Create, Update, Delete, Query),
+ * and then executes the corresponding database operation.
+ */
+
 import { NextResponse } from "next/server";
 import {
   isSupabaseConfigured,
@@ -41,6 +49,12 @@ interface IntentResponse {
   warning?: string;
 }
 
+/**
+ * Matches a parsed category name against the list of available categories.
+ * @param parsedCategory The category name extracted by the LLM.
+ * @param categories The list of available category records.
+ * @returns The category ID if a match is found, otherwise null.
+ */
 function pickCategoryId(
   parsedCategory: string | null,
   categories: Array<{ id: string; name: string }>,
@@ -52,6 +66,12 @@ function pickCategoryId(
   return cat?.id ?? null;
 }
 
+/**
+ * Resolves the default account ID for a given user.
+ * Used to assign transactions when the user doesn't specify an account.
+ * @param userId The UUID of the user.
+ * @returns The default account ID or null if none is configured.
+ */
 async function defaultAccountId(userId: string): Promise<string | null> {
   const supabase = getSupabaseAdmin();
   const { data } = await supabase
@@ -63,6 +83,12 @@ async function defaultAccountId(userId: string): Promise<string | null> {
   return (data?.id as string | undefined) ?? null;
 }
 
+/**
+ * POST /api/voice-intent
+ * Processes a voice transcript to perform a financial action.
+ * Flow: Transcript → Groq LLM Parse → DB Execution (Insert/Update/Delete).
+ * Returns a detailed response including the resulting transaction if applicable.
+ */
 export async function POST(req: Request) {
   let body: IntentBody;
   try {
