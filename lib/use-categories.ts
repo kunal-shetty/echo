@@ -1,4 +1,12 @@
+/**
+ * @file use-categories.ts
+ * @description Custom hook for managing spending categories.
+ * Provides stateful access to category lists and operations to create,
+ * update, and remove categories via the Categories API.
+ */
+
 "use client";
+
 
 import { useCallback, useEffect, useState } from "react";
 import type { Category, Tone } from "@/lib/schema";
@@ -6,31 +14,55 @@ import type { DbCategory } from "@/lib/server/categories";
 import type { IconName } from "@/lib/icon-vocab";
 
 export interface CreateCategoryInput {
+  /** The display name of the category. */
   name: string;
+  /** The Lucide icon identifier. */
   icon?: IconName | null;
+  /** The visual color theme. */
   tone?: Tone;
+  /** The display order (lower numbers appear first). */
   sort_order?: number;
 }
 
 export interface UpdateCategoryInput {
+  /** Updated display name. */
   name?: string;
+  /** Updated icon identifier. */
   icon?: IconName | null;
+  /** Updated color theme. */
   tone?: Tone;
+  /** Updated display order. */
   sort_order?: number;
 }
 
+/** State and actions provided by the useCategories hook. */
 export type CategoriesState = {
+  /** The list of all available categories (system + user). */
   categories: DbCategory[];
+  /** True if the categories have been initialized for the user. */
   configured: boolean;
+  /** True while fetching category data. */
   loading: boolean;
+  /** Error message from the last operation, if any. */
   error: string | null;
+  /** Re-fetches the category list from the server. */
   refresh: () => Promise<void>;
+  /** Creates a new custom category. */
   create: (patch: CreateCategoryInput) => Promise<DbCategory | null>;
+  /** Updates an existing custom category. */
   update: (id: string, patch: UpdateCategoryInput) => Promise<DbCategory | null>;
-  /** Returns false on a 409 (category still referenced by transactions/budgets). */
+  /**
+   * Removes a custom category.
+   * @returns False if the category is still referenced by transactions/budgets (409 Conflict).
+   */
   remove: (id: string) => Promise<boolean>;
 };
 
+/**
+ * Hook for managing the application's category system.
+ * Handles fetching, creating, updating, and deleting categories.
+ * @returns A state object with categories and management functions.
+ */
 export function useCategories(): CategoriesState {
   const [categories, setCategories] = useState<DbCategory[]>([]);
   const [configured, setConfigured] = useState(true);
@@ -154,9 +186,13 @@ export function useCategories(): CategoriesState {
   };
 }
 
-/** Project DB category rows into the UI Category shape used by the
- *  rest of the app. UI fields that aren't in DB (initials/avatar) are
- *  derived. */
+/**
+ * Projects a database category record into the UI-specific Category shape.
+ * This ensures that the UI layer interacts with a consistent interface
+ * regardless of database column naming conventions.
+ * @param row The raw database category row.
+ * @returns A UI-ready Category object.
+ */
 export function toUiCategory(row: DbCategory): Category {
   return {
     id: row.id,
