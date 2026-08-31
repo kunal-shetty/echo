@@ -64,51 +64,6 @@ interface ValidatedRow {
   };
 }
 
-export const runtime = "nodejs";
-
-const MAX_ROWS = 500;
-
-interface BulkRowIn {
-  date?: string | null;
-  amount_minor?: number;
-  currency?: string;
-  merchant_raw?: string;
-  merchant_canonical?: string | null;
-  category_id?: string | null;
-  category_name?: string | null;
-  note?: string | null;
-  direction?: "expense" | "income" | "transfer";
-}
-
-interface BulkBody {
-  rows?: BulkRowIn[];
-}
-
-interface ParsedRow extends BulkTransactionInsert {
-  rowIndex: number;
-}
-
-interface RowFailure {
-  rowIndex: number;
-  error: string;
-}
-
-interface ValidatedRow {
-  rowIndex: number;
-  parsed: Omit<BulkTransactionInsert, "account_id" | "currency" | "category_id" | "merchant_canonical" | "note" | "confidence" | "raw_transcript" | "clarified" | "source" | "direction"> & {
-    account_id: string;
-    currency: string;
-    category_id: string | null;
-    merchant_canonical: string | null;
-    note: string | null;
-    confidence: number | null;
-    raw_transcript: string | null;
-    clarified: boolean;
-    source: BulkTransactionInsert["source"];
-    direction: BulkTransactionInsert["direction"];
-  };
-}
-
 /**
  * Parses a date string into an ISO 8601 timestamp.
  * Accepts YYYY-MM-DD (normalized to midnight UTC) or any valid Date string.
@@ -117,10 +72,8 @@ interface ValidatedRow {
  */
 function parseDate(s: string | null | undefined): string | null {
   if (!s) return null;
-  // Accept YYYY-MM-DD or full ISO; reject anything else.
   const trimmed = s.trim();
   if (trimmed === "") return null;
-  // Date-only → midnight UTC.
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     const d = new Date(`${trimmed}T00:00:00.000Z`);
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
@@ -160,12 +113,11 @@ export async function POST(req: Request) {
   }
   if (rows.length > MAX_ROWS) {
     return NextResponse.json(
-      { error: `Too many rows (max ${MAX_ROWS})` },
+      { error: `Too many rows (max ${MAX_ROWS})` },  // fix 1
       { status: 400 },
     );
   }
 
-  // Resolve default account + user's home currency + known categories once.
   const supabase = getSupabaseAdmin();
   let accountId: string | null = null;
   let homeCurrency = "INR";
@@ -217,7 +169,6 @@ export async function POST(req: Request) {
     }
     const dateIso = parseDate(r.date) ?? nowIso;
 
-    // Resolve category: explicit id → name match → null.
     let categoryId: string | null = null;
     if (r.category_id && knownCategoryIds!.has(r.category_id)) {
       categoryId = r.category_id;
@@ -226,7 +177,7 @@ export async function POST(req: Request) {
     } else if (r.category_id) {
       failures.push({
         rowIndex: idx,
-        error: `Unknown category id '${r.category_id}'`,
+        error: `Unknown category id '${r.category_id}'`,  // fix 2
       });
       return;
     }
@@ -269,9 +220,6 @@ export async function POST(req: Request) {
     });
   });
 
-  // Best-effort: insert all valid rows; never refuse the batch unless
-  // every row failed. We surface per-row failures in the response so the
-  // client can show "Imported N memories (M skipped)".
   let inserted: Transaction[] = [];
   if (validated.length > 0) {
     try {
