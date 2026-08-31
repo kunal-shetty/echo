@@ -1,3 +1,10 @@
+/**
+ * @file route.ts
+ * @description Voice query orchestrator.
+ * Handles the pipeline from user transcript → intent parsing → database query →
+ * conversational response generation using Groq.
+ */
+
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
 import { parseTranscript, generateReasonedResponse } from "@/lib/groq";
@@ -27,6 +34,12 @@ interface AskResponse {
   warning?: string;
 }
 
+/**
+ * Determines the default query kind based on keywords in the transcript.
+ * Fallback for when the LLM doesn't explicitly specify a kind.
+ * @param transcript The raw user utterance.
+ * @returns The inferred QueryKind.
+ */
 function defaultKindForQuery(transcript: string): QueryKind {
   const t = transcript.toLowerCase();
   if (/(biggest|largest|most expensive)/.test(t)) return "biggest";
@@ -38,6 +51,12 @@ function defaultKindForQuery(transcript: string): QueryKind {
  *  model cue list so spend-shaped queries get `expense` and
  *  income-shaped ones get `income` even if the parser mis-classified
  *  the action. */
+/**
+ * Guesses whether a query is about income or expenses based on keywords.
+ * Fallback for when the LLM doesn't explicitly specify a direction.
+ * @param transcript The raw user utterance.
+ * @returns The inferred direction.
+ */
 function defaultDirectionForQuery(transcript: string): "expense" | "income" {
   const t = transcript.toLowerCase();
   if (/(earn|earned|income|salary|received|got paid|credit|cashback|refund|deposit)/.test(t)) {
@@ -46,6 +65,12 @@ function defaultDirectionForQuery(transcript: string): "expense" | "income" {
   return "expense";
 }
 
+/**
+ * POST /api/ask
+ * The main entry point for user questions about their finances.
+ * Uses Groq to parse the intent and a reasoning engine to generate
+ * a conversational answer based on real transaction data.
+ */
 export async function POST(req: Request) {
   let body: AskBody;
   try {
