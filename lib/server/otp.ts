@@ -1,30 +1,35 @@
+/**
+ * @file otp.ts
+ * @description Implements the 6-digit One-Time Password (OTP) flow for email verification.
+ * Handles generation, hashing (with server-side pepper), storage, and verification.
+ */
+
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import { Resend } from "resend";
 
-// 6-digit OTP flow.
-//   - /api/auth/start  → generate code, store hash, send via Resend
-//   - /api/auth/verify → check code, mark user.email_verified_at, migrate
-//
-// We hash the code with a server-side pepper before storing so a DB
-// leak alone isn't enough to brute-force codes.
-
+/** Duration before an OTP expires. */
 const CODE_TTL_MS = 10 * 60 * 1000;
+/** Maximum allowed failed attempts per OTP before expiration. */
 const MAX_ATTEMPTS = 5;
+/** Secret pepper used for hashing OTPs to prevent DB-leak brute-forcing. */
 const PEPPER = process.env.OTP_PEPPER ?? "echo-default-pepper-change-me";
 
+/** Checks if Resend API keys are configured in environment. */
 export function isResendConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM);
 }
 
+/** Generates a random 6-digit zero-padded numeric code. */
 export function generateCode(): string {
-  // 6-digit zero-padded code
   return randomInt(0, 1_000_000).toString().padStart(6, "0");
 }
 
+/** Hashes a raw code using SHA-256 and the server pepper. */
 export function hashCode(code: string): string {
   return createHash("sha256").update(`${PEPPER}:${code}`).digest("hex");
 }
 
+/** Verifies a raw code against a stored hash using timing-safe comparison. */
 export function verifyCodeHash(code: string, hash: string): boolean {
   const candidate = Buffer.from(hashCode(code));
   const expected = Buffer.from(hash);
@@ -32,6 +37,7 @@ export function verifyCodeHash(code: string, hash: string): boolean {
   return timingSafeEqual(candidate, expected);
 }
 
+/** Database representation of an OTP record. */
 export type OtpRow = {
   id: string;
   email: string;
@@ -42,6 +48,12 @@ export type OtpRow = {
   created_at: string;
 };
 
+/**
+ * Stores a new OTP record in the database.
+ * @param email User's email address.
+ * @param code Raw numeric code.
+ * @returns The created OTP record.
+ */
 export async function storeOtp(
   email: string,
   code: string,
@@ -62,6 +74,11 @@ export async function storeOtp(
   return data as OtpRow;
 }
 
+/**
+ * Finds the most recent active, non-expired OTP for a given email.
+ * @param email User's email address.
+ * @returns The active OTP record or null.
+ */
 export async function findActiveOtp(email: string): Promise<OtpRow | null> {
   const { getSupabaseAdmin } = await import("@/lib/server/supabase");
   const supabase = getSupabaseAdmin();
@@ -77,6 +94,10 @@ export async function findActiveOtp(email: string): Promise<OtpRow | null> {
   return (data ?? null) as OtpRow | null;
 }
 
+/**
+ * Marks an OTP as consumed to prevent reuse.
+ * @param id The unique identifier of the OTP record.
+ */
 export async function consumeOtp(id: string): Promise<void> {
   const { getSupabaseAdmin } = await import("@/lib/server/supabase");
   const supabase = getSupabaseAdmin();
@@ -86,12 +107,17 @@ export async function consumeOtp(id: string): Promise<void> {
     .eq("id", id);
 }
 
+/**
+ * Increments the attempt counter for a specific OTP.
+ * @param id The unique identifier of the OTP record.
+ */
 export async function bumpOtpAttempts(id: string): Promise<void> {
   const { getSupabaseAdmin } = await import("@/lib/server/supabase");
   const supabase = getSupabaseAdmin();
-  await supabase.rpc("increment_otp_attempts", { otp_id: id }).then(() => {
-    // RPC may not exist; fall back to read-modify-write
-  });
+  // Attempt to use a Postgres RPC for atomic increment.
+  await supabase.rpc("increment_otp_attempts", { otp_id: id }).catch(() => {});
+
+  // Fallback: Manual read-modify-write.
   const { data } = await supabase
     .from("email_otps")
     .select("attempts")
@@ -105,6 +131,12 @@ export async function bumpOtpAttempts(id: string): Promise<void> {
   }
 }
 
+/**
+ * Sends the OTP code to the user via the Resend email service.
+ * @param email User's email address.
+ * @param code Raw numeric code.
+ * @returns The Resend message ID, or null if not configured.
+ */
 export async function sendOtpEmail(
   email: string,
   code: string,
