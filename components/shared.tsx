@@ -1,5 +1,14 @@
+/**
+ * @file shared.tsx
+ * @description Shared presentational components used across the app.
+ * Includes the project logo and a dynamic user avatar.
+ */
+
 "use client";
 
+/**
+ * Renders the project logo mark and wordmark.
+ */
 export function Logo() {
   return (
     <div className="flex items-center gap-2">
@@ -23,6 +32,9 @@ function initialsFromName(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+/**
+ * Renders a small circular avatar containing initials derived from the user's name.
+ */
 export function Avatar({
   size = 9,
   name,
