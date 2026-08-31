@@ -1,3 +1,10 @@
+/**
+ * @file echo-shell.tsx
+ * @description The root application shell for Echo.
+ * Manages high-level state: routing (screen switching), onboarding,
+ * user session, voice-mode visibility, and the global toast system.
+ */
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -29,6 +36,11 @@ const DEFAULT_USER: UserInfo = {
 
 type AddMode = "single" | "bulk" | "category" | null;
 
+/**
+ * The main application entry point.
+ * Orchestrates the onboarding flow, screen routing, and the interaction
+ * between the voice-interface and the data layer.
+ */
 export function EchoApp() {
   const [ready, setReady] = useState(false);
   const [onboarded, setOnboarded] = useState(false);
@@ -68,6 +80,11 @@ export function EchoApp() {
     return () => el.removeEventListener("scroll", onScroll);
   }, [onboarded, screen]);
 
+  /**
+   * Persists a voice-created transaction to the database and triggers a toast.
+   * @param expense The transaction to save.
+   * @returns The saved transaction record.
+   */
   const persistExpense = async (expense: Transaction) => {
     const saved = await tx.add({
       accountId: expense.accountId,
@@ -101,6 +118,12 @@ export function EchoApp() {
     setToast("Deleted");
   };
 
+  /**
+   * Completes the user onboarding process by saving user preferences and
+   * the first recorded expense.
+   * @param expense The first transaction recorded during onboarding.
+   * @param info The user's profile information.
+   */
   const completeOnboarding = async (
     expense: Transaction,
     info: UserInfo,
