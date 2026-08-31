@@ -1,3 +1,10 @@
+/**
+ * @file route.ts
+ * @description User profile API.
+ * Handles retrieving and updating the current user's profile information,
+ * such as display name, home currency, and preferences.
+ */
+
 import { NextResponse } from "next/server";
 import {
   getOrCreateUserRow,
@@ -7,6 +14,11 @@ import {
 
 export const runtime = "nodejs";
 
+/**
+ * GET /api/me
+ * Retrieves the current user's profile. If the user doesn't exist in the
+ * DB yet (but has a valid device ID), a default row is created.
+ */
 export async function GET() {
   try {
     const row = await getOrCreateUserRow();
@@ -27,6 +39,11 @@ interface PatchBody {
 const CURRENCY_RE = /^[A-Z]{3}$/;
 const REMINDER_OK = new Set(["morning", "evening", "off"]);
 
+/**
+ * PATCH /api/me
+ * Updates the current user's profile. Validates currency codes (ISO 4217)
+ * and reminder settings before persisting to the database.
+ */
 export async function PATCH(req: Request) {
   let body: PatchBody;
   try {
