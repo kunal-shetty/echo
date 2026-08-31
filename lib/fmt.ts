@@ -1,5 +1,9 @@
-// Formatting helpers. Keep all currency / date logic here so the UI stays
-// declarative and the data model stays currency-agnostic.
+/**
+ * @file fmt.ts
+ * @description Formatting helpers for currency, dates, and transcripts.
+ * Centralizes locale-specific formatting (en-IN) to ensure consistency
+ * between the server and client.
+ */
 
 const INDIAN = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -12,6 +16,12 @@ const COMPACT = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 1,
 });
 
+/**
+ * Formats a numeric value as a currency string.
+ * @param value The amount in major units.
+ * @param currency ISO currency code. Defaults to 'INR'.
+ * @returns Formatted currency string (e.g., "₹1,200.00").
+ */
 export function money(value: number, currency = "INR"): string {
   return value.toLocaleString("en-IN", {
     style: "currency",
@@ -20,6 +30,12 @@ export function money(value: number, currency = "INR"): string {
   });
 }
 
+/**
+ * Formats a numeric value as a compact currency string.
+ * Used for charts and dashboards where space is limited.
+ * @param value The amount in major units.
+ * @returns Compact formatted string (e.g., "₹1.2L", "₹1.5K").
+ */
 export function moneyShort(value: number): string {
   if (Math.abs(value) >= 100000) {
     return `₹${COMPACT.format(value / 100000)}L`;
@@ -30,6 +46,12 @@ export function moneyShort(value: number): string {
   return INDIAN.format(value);
 }
 
+/**
+ * Formats a timestamp into a human-readable relative date.
+ * Examples: "Just now", "5m ago", "Today, 9:42 AM", "Yesterday, 7:10 PM".
+ * @param timestamp ISO string, number, or Date object.
+ * @returns Relative date string.
+ */
 export function formatDate(timestamp: string | number | Date): string {
   const d = new Date(timestamp);
   const now = new Date();
@@ -79,6 +101,11 @@ function formatShortDate(d: Date): string {
   });
 }
 
+/**
+ * Returns a time-of-day greeting.
+ * @param name The user's display name.
+ * @returns "Good morning, Name", etc.
+ */
 export function greeting(name: string): string {
   const h = new Date().getHours();
   if (h < 12) return `Good morning, ${name}`;
@@ -86,6 +113,10 @@ export function greeting(name: string): string {
   return `Good evening, ${name}`;
 }
 
+/**
+ * Returns a formatted string of today's date.
+ * Example: "Monday, August 31".
+ */
 export function todayEyebrow(): string {
   return new Date().toLocaleDateString("en-IN", {
     weekday: "long",
@@ -94,12 +125,21 @@ export function todayEyebrow(): string {
   });
 }
 
+/**
+ * Returns the 3-letter abbreviation of a month.
+ * @param month The month string (e.g., "2026-08").
+ * @returns Abbreviated month (e.g., "Aug").
+ */
 export function shortMonth(month: string): string {
   return month.slice(0, 3);
 }
 
-// Echo is INR-first. Transcripts sometimes come back with "$" or "USD" even
-// though the user meant rupees. Normalize for display so the UI shows ₹.
+/**
+ * Normalizes currency references in transcripts.
+ * Replaces "$" or "USD" with "₹" to ensure the UI remains INR-consistent.
+ * @param text The raw transcript text.
+ * @returns Normalized text.
+ */
 export function normalizeTranscript(text: string): string {
   return text
     .replace(/\$([0-9][\d,.]*)/g, "₹$1")
