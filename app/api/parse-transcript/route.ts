@@ -24,15 +24,13 @@ export async function POST(req: Request) {
 
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    // Friendly fallback so the app still works without a key configured.
-    return NextResponse.json({
-      amount: null,
-      merchant: transcript.split(/\s+/).slice(0, 2).join(" "),
-      category: "Other",
-      confidence: 0,
-      transcript,
-      warning: "GROQ_API_KEY is not set; returning stub. See README.",
-    });
+    return NextResponse.json(
+      {
+        error:
+          "GROQ_API_KEY is not set. Add it to your .env to enable transcription.",
+      },
+      { status: 503 },
+    );
   }
 
   try {
