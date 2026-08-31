@@ -1,11 +1,9 @@
-// CSV / TSV paste parser for bulk-add.
-//
-// Detection order:
-//   1. Delimiter: if any line contains a tab → TSV, else comma.
-//   2. Header row: if row 0 cells (lower-cased, trimmed) overlap with
-//      the known header vocabulary AND at least one required field
-//      maps to a known column → treat as headers; user can re-map.
-//   3. Otherwise assume fixed order: [date, amount, merchant, category, note].
+/**
+ * @file bulk-parse.ts
+ * @description Parser for importing financial transactions in bulk via CSV or TSV.
+ * Handles delimiter detection, header mapping (automatic and manual),
+ * tokenization of quoted fields, and basic data validation.
+ */
 
 import type { BulkRowInput } from "@/lib/use-transactions";
 
@@ -17,6 +15,7 @@ export type BulkField =
   | "note"
   | "direction";
 
+/** List of all supported bulk-import fields. */
 export const BULK_FIELDS: BulkField[] = [
   "date",
   "amount",
@@ -26,17 +25,27 @@ export const BULK_FIELDS: BulkField[] = [
   "direction",
 ];
 
+/** Intermediate representation of a parsed row before validation. */
 export interface ParsedBulkRow {
-  rowIndex: number;          // 1-based data-row index (header is row 0)
-  originalIndex: number;     // 0-based index in `rows` (pre-validation)
+  /** 1-based data-row index (header is row 0). */
+  rowIndex: number;
+  /** 0-based index in the original input lines. */
+  originalIndex: number;
+  /** Raw tokenized cells from the line. */
   cells: string[];
+  /** Mapped field values. */
   values: Partial<Record<BulkField, string>>;
+  /** Validation error, if any. */
   error?: string;
 }
 
+/** Result of the bulk parsing process. */
 export interface BulkParseResult {
+  /** All parsed rows. */
   rows: ParsedBulkRow[];
+  /** The delimiter used for tokenization. */
   detectedDelimiter: "," | "\t";
+  /** True if a header row was detected and used for mapping. */
   detectedHeaders: boolean;
   /** Column index → mapped field. Only set when detectedHeaders is true. */
   mapping: Map<number, BulkField | "ignore">;
@@ -102,6 +111,13 @@ function detectDelimiter(lines: string[]): "," | "\t" {
   return ",";
 }
 
+/**
+ * Parses a CSV or TSV string into structured bulk rows.
+ * Detects delimiters and headers automatically, or uses a provided manual mapping.
+ * @param paste The raw text to parse.
+ * @param manualMapping Optional override for header mapping (column-index → field).
+ * @returns A BulkParseResult containing parsed rows and detection metadata.
+ */
 export function parseBulkPaste(
   paste: string,
   /** Manual mapping overrides detected header. Map is column-index → field. */
@@ -199,7 +215,12 @@ export function parseBulkPaste(
   };
 }
 
-/** Validate a parsed row and produce a BulkRowInput (or an error). */
+/**
+ * Validates a parsed bulk row and converts it into a BulkRowInput.
+ * Checks for required fields (merchant, amount) and normalizes the date.
+ * @param parsed The intermediate parsed row.
+ * @returns An object indicating success and the resulting row, or a failure with an error message.
+ */
 export function validateRow(
   parsed: ParsedBulkRow,
 ): { ok: true; row: BulkRowInput } | { ok: false; error: string } {
