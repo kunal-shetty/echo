@@ -1,3 +1,9 @@
+/**
+ * @file bottom-nav.tsx
+ * @description Main navigation bar for the app.
+ * Handles screen switching and the high-priority Voice Button (Echo trigger).
+ */
+
 "use client";
 
 import { motion } from "motion/react";
@@ -19,6 +25,10 @@ const ITEMS = [
   { id: "profile" as Screen, label: "Profile", icon: UserRound },
 ];
 
+/**
+ * The primary bottom navigation bar.
+ * Maps the lapped Screen types to visual items with an animated active pill.
+ */
 export function BottomNav({
   screen,
   setScreen,
@@ -58,6 +68,10 @@ export function BottomNav({
   );
 }
 
+/**
+ * A specialized button for triggering voice input.
+ * Supports a "hold-to-trigger" gesture for faster interaction.
+ */
 function VoiceButton({ onVoice }: { onVoice: () => void }) {
   const [holding, setHolding] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
