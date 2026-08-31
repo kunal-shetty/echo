@@ -1,3 +1,9 @@
+/**
+ * @file icon-picker.tsx
+ * @description UI component for selecting a category icon and color tone.
+ * Uses a grid of available Lucide icons and a segmented control for colors.
+ */
+
 "use client";
 
 import { icons, Package } from "lucide-react";
@@ -36,20 +42,32 @@ const TONE_RING: Record<Tone, string> = {
   neutral: "ring-2 ring-muted-foreground",
 };
 
-/** Resolve a stored icon-name string to a lucide component. Falls back
- *  to Package for unknown values. */
+/**
+ * Resolve a stored icon-name string to a Lucide component.
+ * Falls back to the Package icon for unknown or null values.
+ * @param name The icon name from the vocabulary.
+ * @returns A Lucide icon component.
+ */
 export function resolveLucide(name: string | null | undefined): LucideIcon {
   if (!name) return Package;
   return (icons as Record<string, LucideIcon>)[name] ?? Package;
 }
 
 interface IconPickerProps {
+  /** The currently selected icon name. */
   icon: IconName | null;
+  /** The currently selected visual tone. */
   tone: Tone;
+  /** Callback when either the icon or tone is changed. */
   onChange: (next: { icon: IconName | null; tone: Tone }) => void;
+  /** Optional label for the picker group. */
   label?: string;
 }
 
+/**
+ * A visual selector for picking a category's icon and color tone.
+ * Renders a grid of icons and a segmented control for tones.
+ */
 export function IconPicker({ icon, tone, onChange, label }: IconPickerProps) {
   return (
     <div>
