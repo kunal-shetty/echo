@@ -1,13 +1,25 @@
+/**
+ * @file toast.tsx
+ * @description A simple, animated notification toast.
+ * Displays a success message and automatically dismisses after a delay.
+ */
+
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
 import { SPRING_SNAPPY } from "@/lib/motion";
 
 interface ToastProps {
+  /** The message to display. If null, the toast is hidden. */
   message: string | null;
+  /** Callback triggered after the auto-dismiss timeout. */
   onDismiss?: () => void;
 }
 
+/**
+ * A small, floating notification that appears at the bottom of the screen.
+ * Auto-dismisses after 1.8 seconds of being active.
+ */
 export function Toast({ message, onDismiss }: ToastProps) {
   return (
     <AnimatePresence>
