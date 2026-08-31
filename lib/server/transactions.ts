@@ -23,6 +23,8 @@ export interface DbTransaction {
   clarified: boolean;
 }
 
+export type TransactionInsert = Omit<DbTransaction, "id" | "user_id" | "created_at">;
+
 export async function listTransactions(limit = 100): Promise<DbTransaction[]> {
   const userId = await getDeviceUserId();
   if (!userId) return [];
@@ -39,7 +41,7 @@ export async function listTransactions(limit = 100): Promise<DbTransaction[]> {
 }
 
 export async function createTransaction(
-  patch: Omit<DbTransaction, "id" | "user_id" | "created_at">,
+  patch: TransactionInsert,
 ): Promise<DbTransaction> {
   const userId = await getDeviceUserId();
   if (!userId) throw new Error("No device identity; reload the page.");
@@ -104,28 +106,9 @@ export async function getTransaction(
   return (data ?? null) as DbTransaction | null;
 }
 
-export interface BulkTransactionInsert {
-  account_id: string;
-  category_id: string | null;
-  amount_minor: number;
-  currency: string;
-  direction: "expense" | "income" | "transfer";
-  merchant_raw: string;
-  merchant_canonical: string | null;
-  note: string | null;
-  transacted_at: string;
-  source: "voice" | "manual" | "import" | "recurring";
-  confidence: number | null;
-  raw_transcript: string | null;
-  clarified: boolean;
-}
-
-/** Inserts a batch of transactions in a single round-trip. Caller is
- *  responsible for resolving the default account and validating each
- *  row; we just attach the user id and insert. */
 export async function bulkCreateTransactions(
   userId: string,
-  rows: BulkTransactionInsert[],
+  rows: TransactionInsert[],
 ): Promise<DbTransaction[]> {
   if (rows.length === 0) return [];
   const supabase = getSupabaseAdmin();
