@@ -1,3 +1,13 @@
+/**
+ * @file verify/route.ts
+ * @description Handles OTP verification and user identity migration.
+ * Validates the provided code against the stored hash and, if successful,
+ * associates the user's email with their current device identity.
+ *
+ * If the email is already associated with a different device, the route
+ * performs a "migration" by updating all owned records to the new device ID.
+ */
+
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/server/supabase";
 import { getDeviceUserId } from "@/lib/server/user";
@@ -11,6 +21,10 @@ import {
 
 export const runtime = "nodejs";
 
+/**
+ * Tables that contain a `user_id` column and must be migrated
+ * when a user claims their identity on a new device.
+ */
 const TABLES_OWNED_BY_USER = [
   "accounts",
   "merchant_aliases",
@@ -22,6 +36,10 @@ const TABLES_OWNED_BY_USER = [
   "insights",
 ];
 
+/**
+ * Verifies the OTP and claims the identity.
+ * Flow: Validate Code $\to$ Check Attempts $\to$ Resolve Identity $\to$ Migrate Data $\to$ Update User.
+ */
 export async function POST(req: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
@@ -70,11 +88,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Wrong code." }, { status: 400 });
   }
 
+  // Valid code; remove it so it cannot be reused.
   await consumeOtp(otp.id);
 
   const supabase = getSupabaseAdmin();
 
-  // Find out if the email already owns a different device's data.
+  // Check if this email is already linked to a different device identity.
   const { data: existing } = await supabase
     .from("users")
     .select("id")
@@ -85,23 +104,19 @@ export async function POST(req: Request) {
   let migrated = false;
   if (existing) {
     const fromId = existing.id as string;
-    // 1. Repoint every owned table to the claiming device.
+    // Perform data migration: repoint all user-owned records to the current device ID.
     for (const table of TABLES_OWNED_BY_USER) {
       await supabase
         .from(table)
         .update({ user_id: deviceId })
         .eq("user_id", fromId);
     }
-    // 2. Repoint attachments (lives behind transactions.user_id, but
-    //    its own row has no user_id, so we have to look via tx. The
-    //    transaction UPDATE above already moved the tx rows; the
-    //    attachments follow via FK. Nothing to do for the table itself.)
-    // 3. Delete the now-orphaned old user row.
+    // Delete the orphaned user record from the previous device.
     await supabase.from("users").delete().eq("id", fromId);
     migrated = true;
   }
 
-  // Upsert our device user with the verified email.
+  // Finalize identity by updating the current device's user row with the verified email.
   const { data: row, error } = await supabase
     .from("users")
     .upsert(
