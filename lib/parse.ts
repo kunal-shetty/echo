@@ -11,6 +11,23 @@ export type QueryRange =
   | "last_month"
   | "all";
 
+/** Determines the default query kind based on keywords in the transcript. */
+export function defaultKindForQuery(transcript: string): QueryKind {
+  const t = transcript.toLowerCase();
+  if (/(biggest|largest|most expensive)/.test(t)) return "biggest";
+  if (/(list|show me|what did i|recent)/.test(t)) return "list";
+  return "sum";
+}
+
+/** Guesses whether a query is about income or expenses based on keywords. */
+export function defaultDirectionForQuery(transcript: string): "expense" | "income" {
+  const t = transcript.toLowerCase();
+  if (/(earn|earned|income|salary|received|got paid|credit|cashback|refund|deposit)/.test(t)) {
+    return "income";
+  }
+  return "expense";
+}
+
 export interface RecentTransactionContext {
   id: string;
   transactedAt: string;
