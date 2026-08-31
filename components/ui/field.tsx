@@ -1,17 +1,30 @@
+/**
+ * @file field.tsx
+ * @description A generic form field component.
+ * Wraps a standard input with a label, hint, and optional leading/trailing icons.
+ */
+
 "use client";
 
 import { type ReactNode, forwardRef } from "react";
 
 interface FieldProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "size"> {
+  /** Label displayed above the input. */
   label?: string;
+  /** Hint text displayed below the input. */
   hint?: string;
+  /** Icon rendered at the start of the input. */
   leadingIcon?: ReactNode;
+  /** Content (e.g., unit or validation check) rendered at the end. */
   trailing?: ReactNode;
   /** Marks the field as invalid (used for amount > 0 etc.). */
   invalid?: boolean;
 }
 
+/**
+ * A styled input field with integrated labeling and validation state.
+ */
 export const Field = forwardRef<HTMLInputElement, FieldProps>(function Field(
   { label, hint, leadingIcon, trailing, invalid, className = "", ...props },
   ref,
