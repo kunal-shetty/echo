@@ -31,11 +31,11 @@ function buildSystemPrompt(now: Date): string {
   const today = formatHumanDate(todayIso);
   const yesterday = formatHumanDate(yesterdayIso);
 
-  return \`You are the parser for Echo, a voice-first finance tracker for INR.
+  return `You are the parser for Echo, a voice-first finance tracker for INR.
 
 ## Time context
-- Today is: \${today}
-- Yesterday was: \${yesterday}
+- Today is: ${today}
+- Yesterday was: ${yesterday}
 - All "transacted_at" timestamps you emit must be ISO 8601 in UTC.
   * "today" → start of today in user's timezone, or "now" if the user didn't specify a time.
   * "yesterday" → start of yesterday in user's timezone.
@@ -161,7 +161,7 @@ export async function generateReasonedResponse(
   history: any[] = [],
   apiKey: string,
 ): Promise<string> {
-  const system = \`You are Echo, a concise and encouraging finance coach.
+  const system = `You are Echo, a concise and encouraging finance coach.
 Your goal is to answer the user's query using the provided data, but add a "nugget" of intelligence or a helpful observation.
 
 Rules:
@@ -174,7 +174,7 @@ Rules:
 Example:
 User: "How much did I spend on coffee?"
 Data: { total: 1200, range: "this_month", rows: [...] }
-Response: "You've spent ₹1,200 on coffee this month. That's a bit more than usual—maybe try a few more home-brews?"\`;
+Response: "You've spent ₹1,200 on coffee this month. That's a bit more than usual—maybe try a few more home-brews?"`;
 
   const dataContext = JSON.stringify({
     transcript,
@@ -186,7 +186,7 @@ Response: "You've spent ₹1,200 on coffee this month. That's a bit more than us
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: \`Bearer \${apiKey}\`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: MODEL,
@@ -195,14 +195,14 @@ Response: "You've spent ₹1,200 on coffee this month. That's a bit more than us
         { role: "system", content: system },
         {
           role: "user",
-          content: \`User said: "\${transcript}"\\nData: \${dataContext}\\n\\nWhat is the natural, reasoned response?\`,
+          content: `User said: "${transcript}"\nData: ${dataContext}\n\nWhat is the natural, reasoned response?`,
         },
       ],
     }),
   });
 
   if (!res.ok) {
-    throw new Error(\`Groq response failed: \${res.status}\`);
+    throw new Error(`Groq response failed: ${res.status}`);
   }
 
   const json = (await res.json()) as {
@@ -256,20 +256,20 @@ export async function parseTranscript(
 
   const recentBlock =
     options.recent && options.recent.length > 0
-      ? \`\\n\\n## Recent transactions (newest first)\\nUse these to identify update/delete targets:\\n\` +
+      ? `\n\n## Recent transactions (newest first)\nUse these to identify update/delete targets:\n` +
         options.recent
           .map(
             (r, i) =>
-              \${i + 1}. id="\${r.id}" · \${formatHumanDate(r.transactedAt)} · \${r.merchantRaw} · \${r.amount}\`,
+              `${i + 1}. id="${r.id}" · ${formatHumanDate(r.transactedAt)} · ${r.merchantRaw} · ${r.amount}`,
           )
-          .join("\\n")
-      : "\\n\\n(No recent transactions — the user has no edit/delete targets available.)";
+          .join("\n")
+      : "\n\n(No recent transactions — the user has no edit/delete targets available.)";
 
   const res = await fetch(GROQ_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: \`Bearer \${apiKey}\`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: MODEL,
@@ -279,7 +279,7 @@ export async function parseTranscript(
         { role: "system", content: system + recentBlock },
         {
           role: "user",
-          content: \`Transcript: "\${transcript}"\\n\\nReturn JSON only.\`,
+          content: `Transcript: "${transcript}"\n\nReturn JSON only.`,
         },
       ],
     }),
@@ -287,7 +287,7 @@ export async function parseTranscript(
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(\`Groq \${res.status}: \${detail.slice(0, 240)}\`);
+    throw new Error(`Groq ${res.status}: ${detail.slice(0, 240)}`);
   }
 
   const json = (await res.json()) as {
@@ -299,7 +299,7 @@ export async function parseTranscript(
   try {
     parsed = JSON.parse(content) as GroqParseResponse;
   } catch {
-    throw new Error(\`Groq returned non-JSON: \${content.slice(0, 200)}\`);
+    throw new Error(`Groq returned non-JSON: ${content.slice(0, 200)}`);
   }
 
   const action = normalizeAction(parsed.action);
