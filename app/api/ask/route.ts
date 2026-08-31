@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
-import { parseTranscript } from "@/lib/groq";
+import { parseTranscript, generateReasonedResponse } from "@/lib/groq";
 import { runQuery, type QueryFilters } from "@/lib/server/queries";
 import type { ParseResult, QueryKind, QueryRange } from "@/lib/parse";
+import { defaultKindForQuery, defaultDirectionForQuery } from "@/lib/parse";
 
 export const runtime = "nodejs";
 
 interface AskBody {
   transcript?: string;
+  sessionId?: string;
 }
 
 interface AskResponse {
@@ -110,18 +112,55 @@ export async function POST(req: Request) {
 
   try {
     const result = await runQuery(filters);
+
+    // Fetch conversation history for this session to provide context to Groq.
+    let history = [];
+    if (body.sessionId) {
+      const supabase = (await import("@/lib/server/supabase")).getSupabaseAdmin();
+      const { data: sessions } = await supabase
+        .from("voice_sessions")
+        .select("transcript, parsed_intent")
+        .eq("user_id", userId) // assuming userId is available in scope
+        .eq("device", body.sessionId) // using device as session id for now
+        .order("started_at", { ascending: true })
+        .limit(5);
+      if (sessions) history = sessions;
+    }
+
+    // Generate a reasoned, conversational response using Groq instead of templates.
+    const reasonedSpoken = await generateReasonedResponse(
+      transcript,
+      result,
+      history,
+      apiKey,
+    ).catch(() => result.spoken); // Fallback to template if Groq fails
+
     const response: AskResponse = {
       result: { ...parsed, action: "query", queryKind: kind },
       query: {
         kind: result.kind,
         range: result.range,
         headline: result.headline,
-        spoken: result.spoken,
+        spoken: reasonedSpoken,
         total: result.total,
         rows: result.rows,
         filters: result.filters,
       },
     };
+
+    // Save this turn to voice_sessions for future context.
+    if (body.sessionId) {
+      const supabase = (await import("@/lib/server/supabase")).getSupabaseAdmin();
+      await supabase.from("voice_sessions").insert({
+        user_id: userId,
+        started_at: new Date().toISOString(),
+        transcript,
+        parsed_intent: parsed,
+        outcome: "created",
+        device: body.sessionId,
+      });
+    }
+
     if (parsed.action !== "query") {
       response.warning =
         "I heard that as a question, but I wasn't sure. Here's my best answer.";
