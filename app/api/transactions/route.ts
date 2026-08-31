@@ -3,6 +3,7 @@ import { isSupabaseConfigured } from "@/lib/server/supabase";
 import {
   createTransaction,
   listTransactions,
+  type TransactionInsert,
 } from "@/lib/server/transactions";
 import { listSystemCategories } from "@/lib/server/categories";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
@@ -34,20 +35,7 @@ export async function GET() {
   }
 }
 
-interface CreateBody {
-  amount_minor?: number;
-  currency?: string;
-  direction?: "expense" | "income" | "transfer";
-  merchant_raw?: string;
-  merchant_canonical?: string | null;
-  category_id?: string | null;
-  account_id?: string | null;
-  note?: string | null;
-  source?: "voice" | "manual" | "import" | "recurring";
-  confidence?: number | null;
-  raw_transcript?: string | null;
-  transacted_at?: string;
-}
+// ... existing code ...
 
 export async function POST(req: Request) {
   if (!isSupabaseConfigured()) {
@@ -56,9 +44,9 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  let body: CreateBody;
+  let body: TransactionInsert;
   try {
-    body = (await req.json()) as CreateBody;
+    body = (await req.json()) as TransactionInsert;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
