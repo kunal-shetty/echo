@@ -14,6 +14,8 @@ import {
 } from "@/lib/server/transactions";
 import { listSystemCategories } from "@/lib/server/categories";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
+import { getSessionUserId } from "@/lib/server/user";
+import { getSupabaseAdmin } from "@/lib/server/supabase";
 
 export const runtime = "nodejs";
 
@@ -31,8 +33,17 @@ export async function GET() {
     });
   }
   try {
+    const userId = await getSessionUserId();
+    if (!userId) {
+      return NextResponse.json({
+        transactions: [],
+        categories: [],
+        configured: false,
+      });
+    }
+
     const [rows, cats] = await Promise.all([
-      listTransactions(),
+      listTransactions(userId),
       listSystemCategories(),
     ]);
     const indexed = indexCategories(cats);
@@ -46,8 +57,6 @@ export async function GET() {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-// ... existing code ...
 
 /**
  * POST /api/transactions
@@ -67,7 +76,6 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-
   const amount = Number(body.amount_minor ?? 0);
   if (!(amount > 0)) {
     return NextResponse.json({ error: "Amount must be > 0" }, { status: 400 });
@@ -81,16 +89,15 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Find or use default account.
-    const supabase = (await import("@/lib/server/supabase")).getSupabaseAdmin();
-    const { getDeviceUserId } = await import("@/lib/server/user");
-    const userId = await getDeviceUserId();
+    const userId = await getSessionUserId();
     if (!userId) {
       return NextResponse.json(
-        { error: "No device identity." },
-        { status: 400 },
+        { error: "Unauthorized." },
+        { status: 401 },
       );
     }
+
+    const supabase = getSupabaseAdmin();
 
     let accountId = body.account_id;
     if (!accountId) {
