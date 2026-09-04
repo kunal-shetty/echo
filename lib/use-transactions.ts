@@ -7,9 +7,9 @@
 
 "use client";
 
-
 import { useCallback, useEffect, useState } from "react";
 import type { Transaction } from "@/lib/schema";
+import { LocalStorageProvider, ApiStorageProvider, type StorageProvider } from "@/lib/storage-providers";
 
 /** Fields the UI is allowed to edit. id / userId / source
  *  are intentionally excluded — the server enforces the same whitelist.
@@ -114,6 +114,7 @@ function patchToBody(patch: EditTransactionPatch): Record<string, unknown> {
 /**
  * Hook for managing the application's transactions.
  * Handles fetching, creating, updating, deleting, and bulk-importing transactions.
+ * Switches between LocalStorage and API based on authentication status.
  * @returns A state object with transactions and management functions.
  */
 export function useTransactions(): TransactionsState {
@@ -121,29 +122,61 @@ export function useTransactions(): TransactionsState {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [configured, setConfigured] = useState(true);
+  const [provider, setProvider] = useState<StorageProvider | null>(null);
+
+  const checkAuthAndSetProvider = useCallback(async () => {
+    try {
+      const res = await fetch("/api/me");
+      const json = await res.json();
+      if (json.authenticated) {
+        setProvider(new ApiStorageProvider());
+      } else {
+        setProvider(new LocalStorageProvider());
+      }
+    } catch (e) {
+      setProvider(new LocalStorageProvider());
+    }
+  }, []);
+
+  const migrateLocalData = useCallback(async () => {
+    const local = new LocalStorageProvider();
+    const localTxs = await local.list();
+    if (localTxs.length === 0) return;
+
+    try {
+      const res = await fetch("/api/transactions/migrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactions: localTxs }),
+      });
+      if (res.ok) {
+        // Clear local storage after successful migration
+        window.localStorage.removeItem("echo-tx-local-v1");
+      }
+    } catch (e) {
+      console.error("Migration failed", e);
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
+    if (!provider) {
+      await checkAuthAndSetProvider();
+    }
+
+    const activeProvider = provider ?? new LocalStorageProvider();
+
     try {
       setLoading(true);
-      const res = await fetch("/api/transactions", { cache: "no-store" });
-      if (!res.ok) {
-        setError(`Failed to load (${res.status})`);
-        return;
-      }
-      const json = (await res.json()) as {
-        transactions: Transaction[];
-        configured: boolean;
-        error?: string;
-      };
-      setTransactions(json.transactions ?? []);
-      setConfigured(Boolean(json.configured));
-      setError(json.error ?? null);
+      const txs = await activeProvider.list();
+      setTransactions(txs);
+      setConfigured(true);
+      setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Network error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [provider, checkAuthAndSetProvider]);
 
   const add = useCallback(
     async (
@@ -158,39 +191,19 @@ export function useTransactions(): TransactionsState {
         | "categoryName"
       >,
     ): Promise<Transaction | null> => {
+      const activeProvider = provider ?? new LocalStorageProvider();
       try {
-        const body = {
-          amount_minor: patch.amountMinor,
-          currency: patch.currency,
-          direction: patch.direction,
-          merchant_raw: patch.merchantRaw,
-          merchant_canonical: patch.merchantCanonical ?? patch.merchantRaw,
-          category_id: patch.categoryId,
-          source: patch.source,
-          confidence: patch.confidence,
-          raw_transcript: patch.rawTranscript,
-          transacted_at: patch.transactedAt,
-          note: patch.note ?? null,
-        };
-        const res = await fetch("/api/transactions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) {
-          const j = (await res.json().catch(() => ({}))) as { error?: string };
-          setError(j.error ?? `Save failed (${res.status})`);
-          return null;
+        const transaction = await activeProvider.add(patch);
+        if (transaction) {
+          setTransactions((prev) => [transaction, ...prev]);
         }
-        const json = (await res.json()) as { transaction: Transaction };
-        setTransactions((prev) => [json.transaction, ...prev]);
-        return json.transaction;
+        return transaction;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Network error");
         return null;
       }
     },
-    [],
+    [provider],
   );
 
   const update = useCallback(
@@ -198,95 +211,63 @@ export function useTransactions(): TransactionsState {
       id: string,
       patch: EditTransactionPatch,
     ): Promise<Transaction | null> => {
-      const body = patchToBody(patch);
-      if (Object.keys(body).length === 0) return null;
+      const activeProvider = provider ?? new LocalStorageProvider();
       try {
-        const res = await fetch(`/api/transactions/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const json = (await res.json().catch(() => ({}))) as {
-          transaction?: Transaction;
-          error?: string;
-        };
-        if (!res.ok || !json.transaction) {
-          setError(json.error ?? `Update failed (${res.status})`);
-          return null;
+        const transaction = await activeProvider.update(id, patch);
+        if (transaction) {
+          setTransactions((prev) =>
+            prev.map((t) => (t.id === id ? transaction : t)),
+          );
         }
-        setTransactions((prev) =>
-          prev.map((t) => (t.id === id ? json.transaction! : t)),
-        );
-        return json.transaction;
+        return transaction;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Network error");
         return null;
       }
     },
-    [],
+    [provider],
   );
 
   const remove = useCallback(async (id: string): Promise<boolean> => {
+    const activeProvider = provider ?? new LocalStorageProvider();
     try {
-      const res = await fetch(`/api/transactions/${id}`, { method: "DELETE" });
-      if (res.status === 204 || res.status === 404) {
+      const success = await activeProvider.remove(id);
+      if (success) {
         setTransactions((prev) => prev.filter((t) => t.id !== id));
-        return true;
       }
-      const json = (await res.json().catch(() => ({}))) as { error?: string };
-      setError(json.error ?? `Delete failed (${res.status})`);
-      return false;
+      return success;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Network error");
       return false;
     }
-  }, []);
+  }, [provider]);
 
   const bulkAdd = useCallback(
     async (rows: BulkRowInput[]): Promise<BulkAddResult> => {
-      const body = {
-        rows: rows.map((r) => ({
-          date: r.date ?? null,
-          amount_minor: r.amountMinor,
-          currency: r.currency,
-          merchant_raw: r.merchantRaw,
-          merchant_canonical: r.merchantCanonical ?? null,
-          category_id: r.categoryId ?? null,
-          category_name: r.categoryName ?? null,
-          note: r.note ?? null,
-          direction: r.direction ?? null,
-        })),
-      };
+      const activeProvider = provider ?? new LocalStorageProvider();
       try {
-        const res = await fetch("/api/transactions/bulk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const json = (await res.json().catch(() => ({}))) as {
-          transactions?: Transaction[];
-          failures?: Array<{ rowIndex: number; error: string }>;
-          error?: string;
-        };
-        if (!res.ok) {
-          setError(json.error ?? `Bulk import failed (${res.status})`);
-          return { transactions: [], failures: [] };
+        const result = await activeProvider.bulkAdd(rows);
+        if (result.transactions.length > 0) {
+          setTransactions((prev) => [...result.transactions, ...prev]);
         }
-        const inserted = json.transactions ?? [];
-        if (inserted.length > 0) {
-          setTransactions((prev) => [...inserted, ...prev]);
-        }
-        return {
-          transactions: inserted,
-          failures: json.failures ?? [],
-        };
+        return result;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Network error");
         return { transactions: [], failures: [] };
       }
     },
-    [],
+    [provider],
   );
+
+  useEffect(() => {
+    void checkAuthAndSetProvider();
+  }, [checkAuthAndSetProvider]);
+
+  useEffect(() => {
+    if (provider instanceof ApiStorageProvider) {
+      void migrateLocalData();
+    }
+  }, [provider, migrateLocalData]);
 
   useEffect(() => {
     void refresh();
