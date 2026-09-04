@@ -7,7 +7,7 @@ import {
 } from "@/lib/server/transactions";
 import { listCategoriesForUser } from "@/lib/server/categories";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
-import { getDeviceUserId } from "@/lib/server/user";
+import { getSessionUserId } from "@/lib/server/user";
 
 export const runtime = "nodejs";
 
@@ -62,9 +62,9 @@ export async function PATCH(
       { status: 503 },
     );
   }
-  const userId = await getDeviceUserId();
+  const userId = await getSessionUserId();
   if (!userId) {
-    return NextResponse.json({ error: "No device identity." }, { status: 400 });
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   const { id } = await ctx.params;
 
@@ -224,9 +224,9 @@ export async function DELETE(
       { status: 503 },
     );
   }
-  const userId = await getDeviceUserId();
+  const userId = await getSessionUserId();
   if (!userId) {
-    return NextResponse.json({ error: "No device identity." }, { status: 400 });
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   const { id } = await ctx.params;
   try {
