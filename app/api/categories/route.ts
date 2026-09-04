@@ -11,7 +11,7 @@ import {
   listCategoriesForUser,
 } from "@/lib/server/categories";
 import { isIconName } from "@/lib/icon-vocab";
-import { getDeviceUserId } from "@/lib/server/user";
+import { getSessionUserId } from "@/lib/server/user";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,7 @@ export async function GET() {
     return NextResponse.json({ categories: [], configured: false });
   }
   try {
-    const userId = await getDeviceUserId();
+    const userId = await getSessionUserId();
     if (!userId) {
       return NextResponse.json({ categories: [], configured: true });
     }
@@ -65,9 +65,9 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  const userId = await getDeviceUserId();
+  const userId = await getSessionUserId();
   if (!userId) {
-    return NextResponse.json({ error: "No device identity." }, { status: 400 });
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   let body: CreateCategoryBody;
