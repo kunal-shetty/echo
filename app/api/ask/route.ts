@@ -5,7 +5,7 @@
  * conversational response generation using Groq.
  */
 
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
 import { parseTranscript, generateReasonedResponse } from "@/lib/groq";
 import { runQuery, type QueryFilters } from "@/lib/server/queries";
