@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Mic } from "lucide-react";
 import { BottomNav } from "@/components/bottom-nav";
 import { VoiceSheet } from "@/components/voice-sheet";
@@ -30,6 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setToast,
   } = useApp();
 
+  const voiceSheetRef = useRef<any>(null);
   const tx = useTransactions();
   const [scrolled, setScrolled] = useState(false);
 
@@ -81,9 +82,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
         <BottomNav
-          onVoice={() => setVoiceOpen(true)}
+          onVoice={() => {
+            setVoiceOpen(true);
+            // Request mic access via the ref.
+            // Wrap in setTimeout to ensure the sheet is mounted before calling start.
+            setTimeout(() => voiceSheetRef.current?.start(), 0);
+          }}
         />
         <VoiceSheet
+          ref={voiceSheetRef}
           open={voiceOpen}
           onClose={() => setVoiceOpen(false)}
           onSave={persistExpense}
