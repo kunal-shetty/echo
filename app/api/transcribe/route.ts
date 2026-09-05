@@ -5,7 +5,7 @@
  * raw audio blobs into text transcripts.
  */
 
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 
 export const runtime = "nodejs";
 
