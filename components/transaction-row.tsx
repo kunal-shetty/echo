@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
+import { CircleDollarSign } from "lucide-react";
 import { type Transaction } from "@/lib/schema";
 import { money } from "@/lib/fmt";
 
@@ -50,7 +51,9 @@ export function TransactionRow({
           : undefined
       }
     >
-      <div className={`merchant-icon ${toneClasses[item.tone]}`}>{item.icon}</div>
+      <div className={`merchant-icon ${toneClasses[item.tone]}`}>
+        {item.icon === "CircleDollarSign" ? <CircleDollarSign size={16} /> : item.icon}
+      </div>
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 truncate text-sm font-medium">
           {item.merchantRaw}
