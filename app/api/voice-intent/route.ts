@@ -6,7 +6,7 @@
  * and then executes the corresponding database operation.
  */
 
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import {
   isSupabaseConfigured,
   getSupabaseAdmin,
