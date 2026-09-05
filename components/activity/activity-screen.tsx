@@ -7,29 +7,21 @@ import { type Transaction } from "@/lib/schema";
 import { Header } from "@/components/home/header";
 import { TransactionRow } from "@/components/transaction-row";
 import { useCategories } from "@/lib/use-categories";
+import { useApp } from "@/context/AppContext";
+import { useTransactions } from "@/lib/use-transactions";
 
 const ALL_FILTER = "All";
 
-export function ActivityScreen({
-  onVoice,
-  onAddManually,
-  expenses,
-  loading,
-  configured,
-  scrolled,
-  onRowClick,
-}: {
-  onVoice: () => void;
-  onAddManually?: () => void;
-  expenses: Transaction[];
-  loading: boolean;
-  configured: boolean;
-  scrolled: boolean;
-  onRowClick?: (item: Transaction) => void;
-}) {
+export function ActivityScreen() {
+  const { setVoiceOpen, setAddMode } = useApp();
+  const tx = useTransactions();
   const cats = useCategories();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<string>(ALL_FILTER);
+
+  const expenses = tx.transactions;
+  const loading = tx.loading;
+  const configured = tx.configured;
 
   const FILTERS = useMemo(
     () => [ALL_FILTER, ...cats.categories.map((c) => c.name)],
@@ -54,12 +46,12 @@ export function ActivityScreen({
 
   return (
     <>
-      <Header screen="activity" onVoice={onVoice} scrolled={scrolled} />
+      <Header screen="activity" onVoice={() => setVoiceOpen(true)} scrolled={false} />
       <main className="flex flex-col gap-5 px-5 pb-28">
         {empty ? (
           <EmptyActivity
-            onVoice={onVoice}
-            onAddManually={onAddManually}
+            onVoice={() => setVoiceOpen(true)}
+            onAddManually={() => setAddMode("single")}
             configured={configured}
           />
         ) : (
@@ -112,7 +104,7 @@ export function ActivityScreen({
                     item={item}
                     index={i}
                     key={item.id}
-                    onClick={onRowClick}
+                    onClick={() => {}}
                   />
                 ))}
                 {filtered.length === 0 && !empty && (
