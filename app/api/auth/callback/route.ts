@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import { cookies } from "next/headers";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 import { getOrCreateUserRow } from "@/lib/server/user";
