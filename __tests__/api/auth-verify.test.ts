@@ -26,6 +26,7 @@ vi.mock('@/lib/server/supabase', () => ({
 
 vi.mock('@/lib/server/user', () => ({
   getDeviceUserId: vi.fn(() => Promise.resolve('device-123')),
+  getCurrentUserId: vi.fn(() => Promise.resolve('device-123')),
 }));
 
 vi.mock('@/lib/server/otp', () => ({
