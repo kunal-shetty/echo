@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, Mic, Plus, Tag as TagIcon, Type, Volume2 } from "lucide-react";
+import { Check, Mic, Plus, Tag as TagIcon, Type, Volume2, CircleDollarSign } from "lucide-react";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Field } from "@/components/ui/field";
 import { AmountStepper } from "@/components/ui/amount-stepper";
@@ -31,13 +31,13 @@ interface VoiceSheetProps {
   onDeleted?: (id: string) => void;
 }
 
-export function VoiceSheet({
+export const VoiceSheet = forwardRef(({
   open,
   onClose,
   onSave,
   onUpdated,
   onDeleted,
-}: VoiceSheetProps) {
+}, ref: any) => {
   const [sessionId] = useState(() => Math.random().toString(36).substring(7));
   const { categories: rawCats } = useCategories();
   const categories = rawCats.map(toUiCategory);
@@ -52,22 +52,12 @@ export function VoiceSheet({
   const [answer, setAnswer] = useState<AnswerState | null>(null);
   const synth = useSpeechSynth();
 
-  // Keep categoryId valid when categories load.
-  useEffect(() => {
-    if (categories.length === 0) return;
-    if (!categories.find((c) => c.id === categoryId)) {
-      setCategoryId(categories[0].id);
-    }
-  }, [categories, categoryId]);
-
   const speech = useSpeech({
     onFinal: async (text) => {
       setTranscript(text);
       if (!text) return;
       setMode("parsing");
       try {
-        // Cheap pre-classifier: if it sounds like a question, send to /api/ask.
-        // The ask endpoint itself re-classifies and falls back if needed.
         const lowered = text.toLowerCase();
         const looksLikeQuestion =
           /^(how much|what (did|was|have)|show me|total|sum|biggest|largest|most|list)/i.test(
@@ -103,7 +93,6 @@ export function VoiceSheet({
             kind: askData.query.kind,
           });
           setMode("answer");
-          // Speak the headline back. Cancels any prior utterance.
           if (askData.query.spoken) synth.speak(askData.query.spoken);
           return;
         }
@@ -136,8 +125,6 @@ export function VoiceSheet({
           throw new Error("Empty response from voice intent");
         }
 
-        // Server-side query classification may have routed us to /api/ask
-        // via the parser even though the heuristic missed. Handle it here.
         if (result.action === "query") {
           const askRes = await fetch("/api/ask", {
             method: "POST",
@@ -170,8 +157,6 @@ export function VoiceSheet({
           return;
         }
 
-        // Update / delete: server did the work; close the sheet and let the
-        // shell refresh + toast. The confirm card is for *creating* only.
         if (result.action === "update" && data.transaction) {
           speech.stop();
           onUpdated?.(data.transaction);
@@ -184,7 +169,6 @@ export function VoiceSheet({
           onClose();
           return;
         }
-        // Server could not match → fall back to manual so the user can fix.
         if (
           (result.action === "update" || result.action === "delete") &&
           data.warning
@@ -194,7 +178,6 @@ export function VoiceSheet({
           return;
         }
 
-        // create flow — prefill from the draft the server returned.
         const draft = data.draft;
         if (draft) {
           setConfirmedAmount(draft.amount);
@@ -203,7 +186,6 @@ export function VoiceSheet({
           if (draft.categoryId) setCategoryId(draft.categoryId);
           if (draft.direction) setDirection(draft.direction);
         } else {
-          // No draft but a result came back — pull the fields the old way.
           if (typeof result.amount === "number" && result.amount > 0) {
             setConfirmedAmount(result.amount);
             setAmount(result.amount);
@@ -217,10 +199,6 @@ export function VoiceSheet({
           }
         }
 
-        // Tiered routing on confidence:
-        //   < 0.3  → too uncertain, send to manual entry.
-        //   >= 0.7 → high confidence, the server already saved it; just close.
-        //   0.3..0.7 → show the confirm card so the user can sanity-check.
         if (
           result.confidence < 0.3 ||
           result.amount == null ||
@@ -232,7 +210,6 @@ export function VoiceSheet({
           );
           setMode("manual");
         } else if (result.confidence >= 0.7) {
-          // The server already created the transaction on our behalf.
           speech.stop();
           if (data.transaction) onSave(data.transaction);
           onClose();
@@ -241,11 +218,21 @@ export function VoiceSheet({
         }
       } catch (e) {
         setParseError(e instanceof Error ? e.message : "Parse failed");
-        // Fall through to manual so the user isn't stuck.
         setMode("manual");
       }
     },
   });
+
+  useImperativeHandle(ref, () => ({
+    start: () => {
+      speech.reset();
+      speech.start();
+      setMode("listening");
+    },
+    stop: () => {
+      speech.stop();
+    },
+  }));
 
   // Reset state when the sheet opens
   useEffect(() => {
@@ -260,7 +247,6 @@ export function VoiceSheet({
     setAnswer(null);
     synth.cancel();
     speech.reset();
-    speech.start();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stop any TTS when the sheet closes so it doesn't keep playing in the bg.
@@ -397,7 +383,7 @@ export function VoiceSheet({
       </AnimatePresence>
     </BottomSheet>
   );
-}
+});
 
 function ListeningState({
   transcript,
@@ -552,7 +538,7 @@ function AnswerState({
                     backgroundColor: "var(--surface-3, rgba(0,0,0,0.04))",
                   }}
                 >
-                  {row.icon}
+                  {row.icon === "CircleDollarSign" ? <CircleDollarSign size={14} /> : row.icon}
                 </span>
                 <span className="truncate font-medium">{row.merchantRaw}</span>
               </div>
