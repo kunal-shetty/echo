@@ -1,37 +1,45 @@
+/**
+ * @file login/route.ts
+ * @description Simple email-based login.
+ * Finds or creates a user record, creates a session, and sets the session cookie.
+ */
+
 import { NextResponse } from "next/server";
-import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
+import { loginWithEmail } from "@/lib/server/user";
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_REDIRECT_URI = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback?provider=google`;
+export const runtime = "nodejs";
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const provider = searchParams.get("provider");
-
-  if (provider !== "google") {
-    return NextResponse.json({ error: "Unsupported provider" }, { status: 400 });
+export async function POST(req: Request) {
+  let body: { email?: string };
+  try {
+    body = (await req.json()) as { email?: string };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  if (!GOOGLE_CLIENT_ID) {
-    return NextResponse.json({ error: "Google Client ID not configured" }, { status: 500 });
+  const email = body.email?.trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    return NextResponse.json({ error: "A valid email is required." }, { status: 400 });
   }
 
-  // Generate state for CSRF protection
-  const state = randomBytes(16).toString("hex");
-  const store = await cookies();
-  store.set("oauth_state", state, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 15 // 15 mins
-  });
+  try {
+    const { userId, sessionId } = await loginWithEmail(email);
 
-  const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
-  authUrl.searchParams.set("redirect_uri", GOOGLE_REDIRECT_URI);
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("scope", "openid email profile");
-  authUrl.searchParams.set("state", state);
+    const store = await cookies();
+    store.set("echo_session", sessionId, {
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    });
 
-  return NextResponse.redirect(authUrl.toString());
+    return NextResponse.json({
+      authenticated: true,
+      userId,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Login failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
