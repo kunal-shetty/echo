@@ -15,41 +15,38 @@ import {
   Mic,
   UserRound,
 } from "lucide-react";
-import { type Screen } from "@/lib/schema";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { NAV_PILL } from "@/lib/motion";
 
 const ITEMS = [
-  { id: "home" as Screen, label: "Home", icon: Home },
-  { id: "activity" as Screen, label: "Activity", icon: ListFilter },
-  { id: "insights" as Screen, label: "Insights", icon: Lightbulb },
-  { id: "profile" as Screen, label: "Profile", icon: UserRound },
+  { id: "home", path: "/", label: "Home", icon: Home },
+  { id: "activity", path: "/activity", label: "Activity", icon: ListFilter },
+  { id: "insights", path: "/insights", label: "Insights", icon: Lightbulb },
+  { id: "profile", path: "/profile", label: "Profile", icon: UserRound },
 ];
 
 /**
  * The primary bottom navigation bar.
- * Maps the lapped Screen types to visual items with an animated active pill.
+ * Uses Next.js routing for screen switching with an animated active pill.
  */
 export function BottomNav({
-  screen,
-  setScreen,
   onVoice,
 }: {
-  screen: Screen;
-  setScreen: (s: Screen) => void;
   onVoice: () => void;
 }) {
+  const pathname = usePathname();
+
   return (
     <nav className="bottom-nav" aria-label="Primary">
       {ITEMS.map((item) => {
-        const active = screen === item.id;
+        const active = pathname === item.path;
         return (
-          <motion.button
+          <Link
             key={item.id}
-            type="button"
+            href={item.path}
             aria-current={active ? "page" : undefined}
             className={`nav-item ${active ? "active" : ""}`}
-            onClick={() => setScreen(item.id)}
-            whileTap={{ scale: 0.92 }}
           >
             {active && (
               <motion.span
@@ -60,7 +57,7 @@ export function BottomNav({
             )}
             <item.icon size={20} />
             <span>{item.label}</span>
-          </motion.button>
+          </Link>
         );
       })}
       <VoiceButton onVoice={onVoice} />
