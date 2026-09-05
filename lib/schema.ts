@@ -5,7 +5,7 @@
  * (e.g., converting bigint minor units to number).
  */
 
-export type Screen = "home" | "activity" | "insights" | "profile";
+export type Screen = "home" | "activity" | "insights" | "profile" | "notifications" | "settings" | "help" | "privacy" | "terms";
 
 /** Visual tones used for category coloring. */
 export type Tone =
