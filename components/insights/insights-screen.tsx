@@ -18,21 +18,17 @@ import { Header } from "@/components/home/header";
 import { WrappedStory } from "./wrapped-story";
 import { type Transaction } from "@/lib/schema";
 import { moneyShort, shortMonth } from "@/lib/fmt";
+import { useApp } from "@/context/AppContext";
+import { useTransactions } from "@/lib/use-transactions";
 
-export function InsightsScreen({
-  onVoice,
-  expenses,
-  loading,
-  configured,
-  scrolled,
-}: {
-  onVoice: () => void;
-  expenses: Transaction[];
-  loading: boolean;
-  configured: boolean;
-  scrolled: boolean;
-}) {
+export function InsightsScreen() {
+  const { setVoiceOpen } = useApp();
+  const tx = useTransactions();
   const [insights, setInsights] = useState<any[]>([]);
+
+  const expenses = tx.transactions;
+  const loading = tx.loading;
+  const configured = tx.configured;
 
   useEffect(() => {
     async function fetchInsights() {
@@ -55,7 +51,7 @@ export function InsightsScreen({
 
   return (
     <>
-      <Header screen="insights" onVoice={onVoice} scrolled={scrolled} />
+      <Header screen="insights" onVoice={() => setVoiceOpen(true)} scrolled={false} />
       <main className="flex flex-col gap-5 px-5 pb-28 echo-stagger">
         <div className="insight-hero">
           <div className="flex items-center gap-2 text-emerald">
@@ -71,7 +67,7 @@ export function InsightsScreen({
         </div>
 
         {empty ? (
-          <EmptyInsights onVoice={onVoice} configured={configured} />
+          <EmptyInsights onVoice={() => setVoiceOpen(true)} configured={configured} />
         ) : (
           <>
             <WrappedStory insights={insights} />
@@ -260,15 +256,11 @@ function buildSeries(expenses: Transaction[]): {
   categoryData: Array<{ name: string; value: number; color: string }>;
   monthlyData: Array<{ month: string; spend: number }>;
 } {
-  // Insights focus on spend patterns — income rows would distort the
-  // pie and trend, so filter to expenses here. Income lives on the
-  // Home summary card.
   const spendRows = expenses.filter((t) => t.direction !== "income");
   if (spendRows.length === 0) {
     return { categoryData: [], monthlyData: [] };
   }
 
-  // Category mix — bucket by category name (or "Uncategorized").
   const byCategory = new Map<string, number>();
   for (const tx of spendRows) {
     const key =
@@ -288,7 +280,6 @@ function buildSeries(expenses: Transaction[]): {
       color: PIE_PALETTE[i % PIE_PALETTE.length],
     }));
 
-  // Monthly trend — last 6 months.
   const now = new Date();
   const months: Array<{ month: string; spend: number }> = [];
   for (let i = 5; i >= 0; i--) {
