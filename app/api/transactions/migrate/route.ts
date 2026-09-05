@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured, getSupabaseAdmin } from "@/lib/server/supabase";
-import { getSessionUserId } from "@/lib/server/user";
+import { getCurrentUserId } from "@/lib/server/user";
 import { bulkCreateTransactions } from "@/lib/server/transactions";
 
 export async function POST(req: Request) {
@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Backend not configured." }, { status: 503 });
   }
 
-  const userId = await getSessionUserId();
+  const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
