@@ -6,7 +6,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/server/supabase";
-import { getDeviceUserId } from "@/lib/server/user";
+import { getCurrentUserId } from "@/lib/server/user";
 
 /** Database representation of a merchant alias. */
 export interface DbMerchantAlias {
@@ -55,7 +55,7 @@ function normalize(text: string): string {
  * @returns List of merchant aliases.
  */
 export async function listAliases(): Promise<DbMerchantAlias[]> {
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) return [];
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -108,7 +108,7 @@ export async function upsertAlias(input: {
   canonical: string;
   categoryId: string | null;
 }): Promise<DbMerchantAlias | null> {
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) return null;
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
