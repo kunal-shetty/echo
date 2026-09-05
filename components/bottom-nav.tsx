@@ -39,7 +39,7 @@ export function BottomNav({
 
   return (
     <nav className="bottom-nav" aria-label="Primary">
-      {ITEMS.map((item) => {
+      {ITEMS.slice(0, 2).map((item) => {
         const active = pathname === item.path;
         return (
           <Link
@@ -61,6 +61,27 @@ export function BottomNav({
         );
       })}
       <VoiceButton onVoice={onVoice} />
+      {ITEMS.slice(2).map((item) => {
+        const active = pathname === item.path;
+        return (
+          <Link
+            key={item.id}
+            href={item.path}
+            aria-current={active ? "page" : undefined}
+            className={`nav-item ${active ? "active" : ""}`}
+          >
+            {active && (
+              <motion.span
+                layoutId="nav-pill"
+                className="nav-pill"
+                transition={NAV_PILL}
+              />
+            )}
+            <item.icon size={20} />
+            <span>{item.label}</span>
+          </Link>
+        );
+      })}
     </nav>
   );
 }
@@ -105,7 +126,6 @@ function VoiceButton({ onVoice }: { onVoice: () => void }) {
       transition={{ type: "spring", stiffness: 380, damping: 22 }}
     >
       <Mic size={28} strokeWidth={2.4} />
-      <span>Echo</span>
     </motion.button>
   );
 }
