@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
-import { getDeviceUserId } from "@/lib/server/user";
+import { getCurrentUserId } from "@/lib/server/user";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) {
-    return NextResponse.json({ error: "No device identity." }, { status: 400 });
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   const supabase = getSupabaseAdmin();
