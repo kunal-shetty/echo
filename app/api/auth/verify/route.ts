@@ -8,7 +8,7 @@
  * performs a "migration" by updating all owned records to the new device ID.
  */
 
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/server/supabase";
 import { getCurrentUserId } from "@/lib/server/user";
 import {
