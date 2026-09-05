@@ -10,7 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/server/supabase";
-import { getDeviceUserId } from "@/lib/server/user";
+import { getCurrentUserId } from "@/lib/server/user";
 import {
   bumpOtpAttempts,
   consumeOtp,
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const deviceId = await getDeviceUserId();
+  const deviceId = await getCurrentUserId();
   if (!deviceId) {
     return NextResponse.json(
       { error: "No device identity found. Reload the page and try again." },
