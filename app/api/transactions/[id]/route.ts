@@ -7,7 +7,7 @@ import {
 } from "@/lib/server/transactions";
 import { listCategoriesForUser } from "@/lib/server/categories";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
-import { getSessionUserId } from "@/lib/server/user";
+import { getCurrentUserId } from "@/lib/server/user";
 
 export const runtime = "nodejs";
 
@@ -62,7 +62,7 @@ export async function PATCH(
       { status: 503 },
     );
   }
-  const userId = await getSessionUserId();
+  const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
@@ -224,7 +224,7 @@ export async function DELETE(
       { status: 503 },
     );
   }
-  const userId = await getSessionUserId();
+  const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
