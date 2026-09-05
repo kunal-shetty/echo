@@ -18,7 +18,7 @@ import {
   listTransactions,
   updateTransaction,
 } from "@/lib/server/transactions";
-import { listSystemCategories } from "@/lib/server/categories";
+import { listSystemCategories, createCategory } from "@/lib/server/categories";
 import { resolveMerchant } from "@/lib/server/merchant-aliases";
 import { parseTranscript } from "@/lib/groq";
 import type { ParseResult } from "@/lib/parse";
@@ -190,7 +190,18 @@ export async function POST(req: Request) {
       if (parsed.newTransactedAt) patch.transacted_at = parsed.newTransactedAt;
       if (parsed.direction) patch.direction = parsed.direction;
       if (parsed.category) {
-        const catId = pickCategoryId(parsed.category, sysCats);
+        let catId = pickCategoryId(parsed.category, sysCats);
+        if (!catId) {
+          try {
+            const newCat = await createCategory(userId, {
+              name: parsed.category,
+              tone: "neutral",
+            });
+            catId = newCat.id;
+          } catch (e) {
+            console.error("Failed to auto-create category during update", e);
+          }
+        }
         if (catId) patch.category_id = catId;
       }
 
@@ -238,9 +249,21 @@ export async function POST(req: Request) {
     const resolved = await resolveMerchant(parsed.merchant);
     const merchantCanonical = resolved.canonical;
 
-    const categoryId =
+    let categoryId =
       pickCategoryId(parsed.category, sysCats) ??
       (resolved.alias?.category_id ?? null);
+
+    if (!categoryId && parsed.category) {
+      try {
+        const newCat = await createCategory(userId, {
+          name: parsed.category,
+          tone: "neutral",
+        });
+        categoryId = newCat.id;
+      } catch (e) {
+        console.error("Failed to auto-create category during create", e);
+      }
+    }
 
     // If we just discovered a new merchant, persist it as a fresh alias so
     // future utterances that mis-hear the same name will fuzzy-match it.
