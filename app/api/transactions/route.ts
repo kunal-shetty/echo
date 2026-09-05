@@ -92,8 +92,8 @@ export async function POST(req: Request) {
     const userId = await getCurrentUserId();
     if (!userId) {
       return NextResponse.json(
-        { error: "Unauthorized." },
-        { status: 401 },
+        { error: "No device identity." },
+        { status: 400 },
       );
     }
 
