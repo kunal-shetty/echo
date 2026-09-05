@@ -2,12 +2,15 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SyncSheet } from '@/components/profile/sync-sheet';
 
-vi.mock('@/lib/use-remote-user', () => ({
-  useRemoteUser: vi.fn(() => ({
-    user: null,
-    refresh: vi.fn(),
-  })),
-}));
+// Use a function for the mock to ensure it's defined correctly
+vi.mock('@/lib/use-remote-user', () => {
+  return {
+    useRemoteUser: vi.fn(() => ({
+      user: null,
+      refresh: vi.fn(),
+    })),
+  };
+});
 
 // Mock BottomSheet to just render children
 vi.mock('@/components/ui/bottom-sheet', () => ({
@@ -17,7 +20,7 @@ vi.mock('@/components/ui/bottom-sheet', () => ({
 // Mock Field to just render an input
 vi.mock('@/components/ui/field', () => ({
   Field: ({ label, onChange, value, placeholder }: any) => {
-    const id = `field-${label.toLowerCase().replace(/\s+/g, '-')}`;
+    const id = `field-${label.toLowerCase().replace(/\\s+/g, '-')}`;
     return (
       <div>
         <label htmlFor={id}>{label}</label>
