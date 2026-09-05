@@ -14,7 +14,7 @@ import {
 } from "@/lib/server/transactions";
 import { listSystemCategories } from "@/lib/server/categories";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
-import { getSessionUserId } from "@/lib/server/user";
+import { getCurrentUserId } from "@/lib/server/user";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 
 export const runtime = "nodejs";
@@ -33,7 +33,7 @@ export async function GET() {
     });
   }
   try {
-    const userId = await getSessionUserId();
+    const userId = await getCurrentUserId();
     if (!userId) {
       return NextResponse.json({
         transactions: [],
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const userId = await getSessionUserId();
+    const userId = await getCurrentUserId();
     if (!userId) {
       return NextResponse.json(
         { error: "Unauthorized." },
