@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/server/supabase";
-import { getDeviceUserId } from "@/lib/server/user";
-import { money } from "@/lib/fmt";
-import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
-import { listSystemCategories } from "@/lib/server/categories";
+import { getCurrentUserId } from "@/lib/server/user";
+import { generateSmartInsights } from "@/lib/groq";
 
 export const runtime = "nodejs";
 
 export async function POST() {
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json({ error: "No device identity." }, { status: 400 });
   }
@@ -28,67 +26,15 @@ export async function POST() {
       return NextResponse.json({ message: "No transactions found to analyze." });
     }
 
-    const insights: any[] = [];
-
-    // --- Pattern 1: The Biggest Spend (Anomaly) ---
-    const biggest = txs.reduce((prev, curr) =>
-      (curr.amount_minor > prev.amount_minor) ? curr : prev
-    , txs[0]);
-
-    insights.push({
-      kind: 'anomaly',
-      payload: {
-        title: "Biggest Memory",
-        text: `Your biggest spend was ${money(biggest.amount_minor)} on ${biggest.merchant_raw}.`,
-        hero_metric: money(biggest.amount_minor),
-        cta: "View details"
-      }
-    });
-
-    // --- Pattern 2: The Top Category (Habit) ---
-    const catSpend: Record<string, number> = {};
-    txs.forEach(t => {
-      const catId = t.category_id || "Other";
-      catSpend[catId] = (catSpend[catId] || 0) + t.amount_minor;
-    });
-
-    const topCatId = Object.entries(catSpend).sort((a, b) => b[1] - a[1])[0]?.[0];
-    if (topCatId) {
-      const cats = await listSystemCategories().catch(() => []);
-      const catMatch = cats.find(c => c.id === topCatId) || { name: "Other" };
-
-      insights.push({
-        kind: 'spend_pattern',
-        payload: {
-          title: "Spending Habit",
-          text: `You've spent the most on ${catMatch.name} this period.`,
-          hero_metric: money(catSpend[topCatId]),
-          cta: "Analyze la"
-        }
-      });
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: "GROQ_API_KEY not set." }, { status: 500 });
     }
 
-    // --- Pattern 3: The Loyal Customer (Loyalty) ---
-    const merchantCounts: Record<string, number> = {};
-    txs.forEach(t => {
-      const m = t.merchant_canonical || t.merchant_raw;
-      merchantCounts[m] = (merchantCounts[m] || 0) + 1;
-    });
+    // 2. Generate Reasoned Insights using Groq.
+    const insights = await generateSmartInsights(txs, apiKey);
 
-    const topMerchant = Object.entries(merchantCounts).sort((a, b) => b[1] - a[1])[0];
-    if (topMerchant && topMerchant[1] > 1) {
-      insights.push({
-        kind: 'trend',
-        payload: {
-          title: "Loyal Customer",
-          text: `You've visited ${topMerchant[0]} ${topMerchant[1]} times!`,
-          hero_metric: `${topMerchant[1]}x`,
-          cta: "See all"
-        }
-      });
-    }
-
-    // 2. Persist insights to the database.
+    // 3. Persist insights to the database.
     // First, clear old insights for the user to keep it fresh.
     await supabase.from("insights").delete().eq("user_id", userId);
 
@@ -106,7 +52,7 @@ export async function POST() {
     if (insErr) throw insErr;
 
     return NextResponse.json({
-      message: `Generated ${insights.length} insights.`,
+      message: `Generated ${insights.length} smart insights.`,
       insights
     });
   } catch (e) {
