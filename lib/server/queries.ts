@@ -6,7 +6,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/server/supabase";
-import { getDeviceUserId } from "@/lib/server/user";
+import { getCurrentUserId } from "@/lib/server/user";
 import type { QueryKind, QueryRange } from "@/lib/parse";
 import type { Transaction } from "@/lib/schema";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
@@ -152,7 +152,7 @@ function categoryFilterLabel(category: string | null): string {
 export async function runQuery(
   filters: QueryFilters,
 ): Promise<QueryResult> {
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) {
     throw new Error("No device identity.");
   }
