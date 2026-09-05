@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/server/supabase";
-import { getDeviceUserId } from "@/lib/server/user";
+import { getCurrentUserId } from "@/lib/server/user";
 
 // DB row mirrors schema.sql `public.transactions`. We map it to the UI
 // shape in `lib/transaction-shape.ts` before sending to the client.
@@ -26,7 +26,7 @@ export interface DbTransaction {
 export type TransactionInsert = Omit<DbTransaction, "id" | "user_id" | "created_at">;
 
 export async function listTransactions(limit = 100): Promise<DbTransaction[]> {
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) return [];
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -43,7 +43,7 @@ export async function listTransactions(limit = 100): Promise<DbTransaction[]> {
 export async function createTransaction(
   patch: TransactionInsert,
 ): Promise<DbTransaction> {
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) throw new Error("No device identity; reload the page.");
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -56,7 +56,7 @@ export async function createTransaction(
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) return;
   const supabase = getSupabaseAdmin();
   await supabase
@@ -75,7 +75,7 @@ export async function updateTransaction(
     >
   >,
 ): Promise<DbTransaction | null> {
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) return null;
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -92,7 +92,7 @@ export async function updateTransaction(
 export async function getTransaction(
   id: string,
 ): Promise<DbTransaction | null> {
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) return null;
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
