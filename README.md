@@ -80,8 +80,3 @@ Echo uses a sophisticated **2-Layer Processing Pipeline** to balance speed and i
    ```bash
    npm run dev
    ```
-
----
-
-## 📜 License
-MIT
