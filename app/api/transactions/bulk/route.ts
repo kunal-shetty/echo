@@ -16,7 +16,7 @@ import {
   listCategoriesForUser,
 } from "@/lib/server/categories";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
-import { getDeviceUserId, getUserRow } from "@/lib/server/user";
+import { getCurrentUserId, getUserRow } from "@/lib/server/user";
 import type { Transaction } from "@/lib/schema";
 
 export const runtime = "nodejs";
@@ -95,7 +95,7 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json({ error: "No device identity." }, { status: 400 });
   }
