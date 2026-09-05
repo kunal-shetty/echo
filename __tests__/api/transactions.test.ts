@@ -27,7 +27,7 @@ vi.mock('@/lib/server/categories', () => ({
 }));
 
 vi.mock('@/lib/server/user', () => ({
-  getDeviceUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  getCurrentUserId: vi.fn(() => Promise.resolve('test-user-id')),
 }));
 
 vi.mock('@/lib/transaction-shape', () => ({
@@ -151,8 +151,8 @@ describe('POST /api/transactions', () => {
   });
 
   it('should return 400 if no device identity is found', async () => {
-    const { getDeviceUserId } = await import('@/lib/server/user');
-    (getDeviceUserId as any).mockResolvedValueOnce(null);
+    const { getCurrentUserId } = await import('@/lib/server/user');
+    (getCurrentUserId as any).mockResolvedValueOnce(null);
 
     const req = new Request('http://localhost/api/transactions', {
       method: 'POST',
