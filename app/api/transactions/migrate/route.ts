@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import { isSupabaseConfigured, getSupabaseAdmin } from "@/lib/server/supabase";
 import { getCurrentUserId } from "@/lib/server/user";
 import { bulkCreateTransactions } from "@/lib/server/transactions";
