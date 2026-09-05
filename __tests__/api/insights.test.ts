@@ -17,6 +17,7 @@ vi.mock('@/lib/server/supabase', () => ({
 
 vi.mock('@/lib/server/user', () => ({
   getDeviceUserId: vi.fn(() => Promise.resolve('user-123')),
+  getCurrentUserId: vi.fn(() => Promise.resolve('user-123')),
 }));
 
 vi.mock('@/lib/server/categories', () => ({
@@ -30,14 +31,21 @@ vi.mock('@/lib/fmt', () => ({
   money: vi.fn((val) => `$${(val / 100).toFixed(2)}`),
 }));
 
+vi.mock('@/lib/groq', () => ({
+  generateSmartInsights: vi.fn(),
+}));
+
 describe('POST /api/insights/generate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('GROQ_API_KEY', 'test-key');
   });
 
+
   it('should return 400 if no device identity', async () => {
-    const { getDeviceUserId } = await import('@/lib/server/user');
-    (getDeviceUserId as any).mockResolvedValueOnce(null);
+    const { getCurrentUserId } = await import('@/lib/server/user');
+    (getCurrentUserId as any).mockResolvedValueOnce(null);
+
 
     const res = await POST(new Request('http://localhost/api/insights/generate', { method: 'POST' }));
     const data = await res.json();
@@ -47,11 +55,19 @@ describe('POST /api/insights/generate', () => {
   });
 
   it('should generate anomaly, habit, and loyalty insights', async () => {
+    const { generateSmartInsights } = await import('@/lib/groq');
+    (generateSmartInsights as any).mockResolvedValue([
+      { kind: 'anomaly', payload: { title: 'Biggest Memory', hero_metric: '$50.00' } },
+      { kind: 'spend_pattern', payload: { text: 'Your spending on Housing is high', hero_metric: '$50.00' } },
+      { kind: 'trend', payload: { text: 'You visited Coffee Shop 2 times', hero_metric: '2x' } },
+    ]);
+
     const mockTxs = [
       { amount_minor: 1000, merchant_raw: 'Coffee', category_id: 'cat-1', merchant_canonical: 'Coffee Shop' },
       { amount_minor: 5000, merchant_raw: 'Rent', category_id: 'cat-2', merchant_canonical: 'Landlord' },
       { amount_minor: 1000, merchant_raw: 'Lunch', category_id: 'cat-1', merchant_canonical: 'Coffee Shop' },
     ];
+
 
     mockSupabaseClient.is.mockResolvedValue({ data: mockTxs, error: null });
 
