@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import { parseTranscript } from "@/lib/groq";
 
 export const runtime = "nodejs";
