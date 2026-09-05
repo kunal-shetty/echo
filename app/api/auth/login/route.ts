@@ -4,7 +4,7 @@
  * Finds or creates a user record, creates a session, and sets the session cookie.
  */
 
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import { cookies } from "next/headers";
 import { loginWithEmail } from "@/lib/server/user";
 
