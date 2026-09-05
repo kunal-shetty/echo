@@ -11,7 +11,7 @@ import {
   updateCategory,
 } from "@/lib/server/categories";
 import { isIconName } from "@/lib/icon-vocab";
-import { getDeviceUserId } from "@/lib/server/user";
+import { getCurrentUserId } from "@/lib/server/user";
 
 export const runtime = "nodejs";
 
@@ -47,7 +47,7 @@ export async function PATCH(
       { status: 503 },
     );
   }
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json({ error: "No device identity." }, { status: 400 });
   }
@@ -129,7 +129,7 @@ export async function DELETE(
       { status: 503 },
     );
   }
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json({ error: "No device identity." }, { status: 400 });
   }
