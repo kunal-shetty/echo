@@ -24,7 +24,7 @@ import { parseTranscript } from "@/lib/groq";
 import type { ParseResult } from "@/lib/parse";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
 import type { Transaction } from "@/lib/schema";
-import { getDeviceUserId } from "@/lib/server/user";
+import { getCurrentUserId } from "@/lib/server/user";
 import { upsertAlias } from "@/lib/server/merchant-aliases";
 
 export const runtime = "nodejs";
@@ -126,7 +126,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const userId = await getDeviceUserId();
+  const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json(
       { error: "No device identity." },
