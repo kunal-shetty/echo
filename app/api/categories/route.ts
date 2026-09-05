@@ -11,7 +11,7 @@ import {
   listCategoriesForUser,
 } from "@/lib/server/categories";
 import { isIconName } from "@/lib/icon-vocab";
-import { getSessionUserId } from "@/lib/server/user";
+import { getCurrentUserId } from "@/lib/server/user";
 
 export const runtime = "nodejs";
 
@@ -24,7 +24,7 @@ export async function GET() {
     return NextResponse.json({ categories: [], configured: false });
   }
   try {
-    const userId = await getSessionUserId();
+    const userId = await getCurrentUserId();
     if (!userId) {
       return NextResponse.json({ categories: [], configured: true });
     }
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  const userId = await getSessionUserId();
+  const userId = await getCurrentUserId();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
