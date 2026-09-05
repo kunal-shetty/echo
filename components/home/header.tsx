@@ -18,6 +18,11 @@ const TITLES: Record<Screen, (name: string) => string> = {
   activity: () => "Activity",
   insights: () => "Your insights",
   profile: () => "Profile",
+  notifications: () => "Notifications",
+  settings: () => "App settings",
+  help: () => "Help & support",
+  privacy: () => "Privacy Policy",
+  terms: () => "Terms of Service",
 };
 
 export function Header({
