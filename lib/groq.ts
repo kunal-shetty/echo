@@ -211,6 +211,71 @@ Response: "You've spent ₹1,200 on coffee this month. That's a bit more than us
   return json.choices?.[0]?.message?.content?.trim() ?? "I'm not sure how to answer that right now.";
 }
 
+/**
+ * Generates a set of "Smart Insights" based on transaction data.
+ * Uses Groq to analyze patterns and provide reasoned financial coaching.
+ */
+export async function generateSmartInsights(
+  transactions: any[],
+  apiKey: string,
+): Promise<Array<{ kind: string; payload: any }>> {
+  const system = `You are Echo's Insight Engine. You analyze financial transactions and provide 3-5 high-impact, reasoned insights.
+
+  Rules:
+  - Focus on patterns: anomalies, habits, or trends.
+  - Be concise but insightful.
+  - Format each insight as a JSON object with:
+    - title: A catchy title (e.g., "Spending Spike", "Loyalty Alert").
+    - text: The reasoned insight (e.g., "You spent ₹2,000 more on Food than last month").
+    - hero_metric: The key number (e.g., "₹2,000").
+    - cta: A call to action (e.g., "Review Food expenses").
+    - kind: One of "anomaly", "spend_pattern", "trend".
+  - Respond with a JSON array of these objects. No markdown.`;
+
+  const dataContext = JSON.stringify(transactions.map(t => ({
+    merchant: t.merchant_raw,
+    amount: t.amount_minor,
+    category: t.category_id,
+    date: t.transacted_at
+  })));
+
+  const res = await fetch(GROQ_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content: `Transactions: ${dataContext}\n\nGenerate 3 smart insights.`,
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) throw new Error(`Groq insights failed: ${res.status}`);
+
+  const json = await res.json();
+  // Groq might return { insights: [...] } or just the array
+  const insights = json.insights || (Array.isArray(json) ? json : Object.values(json)[0]);
+
+  return (Array.isArray(insights) ? insights : []).map(i => ({
+    kind: i.kind || 'trend',
+    payload: {
+      title: i.title || "Insight",
+      text: i.text || "",
+      hero_metric: i.hero_metric || "",
+      cta: i.cta || "View details"
+    }
+  }));
+}
+
 interface GroqParseResponse {
   action?: string;
   amount?: number | null;
