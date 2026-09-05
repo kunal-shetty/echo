@@ -1,7 +1,6 @@
 /**
  * @file user.ts
- * @description Manages user identity and profile records. Echo uses a session-based
- * identifier for authenticated users and falls back to guest mode.
+ * @description Manages user identity and profile records.
  */
 
 import { randomUUID } from "node:crypto";
@@ -14,34 +13,69 @@ const SESSION_COOKIE = "echo_session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
 /**
- * Retrieves the current authenticated user ID from the session.
- * @returns The authenticated user identifier, or null if no valid session is found.
+ * Retrieves the current user ID.
+ * Priority: Session Cookie -> Guest ID (fallback).
  */
-export async function getSessionUserId(): Promise<string | null> {
+export async function getCurrentUserId(): Promise<string> {
   const store = await cookies();
   const sessionId = store.get(SESSION_COOKIE)?.value;
-  if (!sessionId) return null;
 
-  if (!isSupabaseConfigured()) return null;
+  if (sessionId && isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: session } = await supabase
+      .from("sessions")
+      .select("user_id")
+      .eq("id", sessionId)
+      .maybeSingle();
+    if (session) return session.user_id;
+  }
+
+  return store.get("echo_guest_id")?.value || randomUUID();
+}
+
+/**
+ * Log in a user via email.
+ * Finds or creates the user, creates a session, and returns the user ID.
+ */
+export async function loginWithEmail(email: string): Promise<{ userId: string; sessionId: string }> {
+  if (!isSupabaseConfigured()) throw new Error("Backend not configured");
   const supabase = getSupabaseAdmin();
-  const { data: session } = await supabase
-    .from("sessions")
-    .select("user_id")
-    .eq("id", sessionId)
-    .maybeSingle();
 
-  return session?.user_id ?? null;
+  // 1. Find or create user
+  const { data: user, error: userErr } = await supabase
+    .from("users")
+    .upsert(
+      { email: email.toLowerCase() },
+      { onConflict: "email" }
+    )
+    .select("*")
+    .single();
+
+  if (userErr) throw userErr;
+
+  // 2. Create session
+  const sessionId = randomUUID();
+  const { error: sessionErr } = await supabase
+    .from("sessions")
+    .insert({
+      id: sessionId,
+      user_id: user.id,
+      created_at: new Date().toISOString(),
+    });
+
+  if (sessionErr) throw sessionErr;
+
+  return { userId: user.id, sessionId };
 }
 
 /**
  * Ensures a corresponding row exists in the `public.users` table.
- * This is now used during OAuth account creation.
  * @returns The user profile row, or null if Supabase is not configured.
  */
 export async function getOrCreateUserRow(userId?: string): Promise<UserRow | null> {
   if (!isSupabaseConfigured()) return null;
 
-  const id = userId ?? await getSessionUserId() ?? randomUUID();
+  const id = userId ?? await getCurrentUserId();
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("users")
@@ -64,8 +98,7 @@ export async function getOrCreateUserRow(userId?: string): Promise<UserRow | nul
  */
 export async function getUserRow(): Promise<UserRow | null> {
   if (!isSupabaseConfigured()) return null;
-  const userId = await getSessionUserId();
-  if (!userId) return null;
+  const userId = await getCurrentUserId();
   const supabase = getSupabaseAdmin();
   const { data } = await supabase
     .from("users")
@@ -84,8 +117,7 @@ export async function updateUserRow(
   patch: Partial<UserRow>,
 ): Promise<UserRow | null> {
   if (!isSupabaseConfigured()) return null;
-  const userId = await getSessionUserId();
-  if (!userId) return null;
+  const userId = await getCurrentUserId();
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("users")
