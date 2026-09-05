@@ -19,6 +19,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { SyncSheet } from "@/components/profile/sync-sheet";
 import { useRemoteUser } from "@/lib/use-remote-user";
+import { useApp } from "@/context/AppContext";
 import type { UserInfo } from "@/components/onboarding";
 
 interface Row {
@@ -29,17 +30,8 @@ interface Row {
   badge?: React.ReactNode;
 }
 
-export function ProfileScreen({
-  onVoice,
-  scrolled,
-  user,
-  onUpdateUser,
-}: {
-  onVoice: () => void;
-  scrolled: boolean;
-  user: UserInfo;
-  onUpdateUser: (patch: Partial<UserInfo>) => void;
-}) {
+export function ProfileScreen() {
+  const { user, updateUser, setVoiceOpen } = useApp();
   const [editing, setEditing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [draftName, setDraftName] = useState(user.name);
@@ -71,7 +63,7 @@ export function ProfileScreen({
 
   return (
     <>
-      <Header screen="profile" onVoice={onVoice} scrolled={scrolled} />
+      <Header screen="profile" onVoice={() => setVoiceOpen(true)} scrolled={false} />
       <main className="flex flex-col gap-5 px-5 pb-28">
         <div className="profile-card">
           <Avatar size={11} name={displayName} />
@@ -145,7 +137,7 @@ export function ProfileScreen({
               ariaLabel="profile-currency"
               value={user.currency}
               onChange={(v) =>
-                onUpdateUser({ currency: v as UserInfo["currency"] })
+                updateUser({ currency: v as UserInfo["currency"] })
               }
               options={(["INR", "USD", "EUR", "GBP"] as const).map((c) => ({
                 value: c,
@@ -162,7 +154,7 @@ export function ProfileScreen({
               ariaLabel="profile-reminder"
               value={user.reminderTime}
               onChange={(v) =>
-                onUpdateUser({ reminderTime: v as UserInfo["reminderTime"] })
+                updateUser({ reminderTime: v as UserInfo["reminderTime"] })
               }
               options={(["morning", "evening", "off"] as const).map((r) => ({
                 value: r,
@@ -176,7 +168,7 @@ export function ProfileScreen({
             type="button"
             className="primary-button"
             onClick={() => {
-              if (draftName.trim()) onUpdateUser({ name: draftName.trim() });
+              if (draftName.trim()) updateUser({ name: draftName.trim() });
               setEditing(false);
             }}
             whileTap={{ scale: 0.99 }}
