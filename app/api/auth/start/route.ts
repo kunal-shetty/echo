@@ -5,7 +5,7 @@
  * database, and sends it to the user via the Resend email service.
  */
 
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import { getOrCreateUserRow } from "@/lib/server/user";
 import {
   generateCode,
