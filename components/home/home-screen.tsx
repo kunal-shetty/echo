@@ -2,38 +2,30 @@
 
 import { Lightbulb, Mic, Receipt } from "lucide-react";
 import { motion } from "motion/react";
-import { type Screen, type Transaction } from "@/lib/schema";
+import { type Transaction } from "@/lib/schema";
 import { Header } from "@/components/home/header";
 import { SummaryCard } from "@/components/home/summary-card";
 import { TransactionRow } from "@/components/transaction-row";
-import type { UserInfo } from "@/components/onboarding";
+import { useApp } from "@/context/AppContext";
+import { useRouter } from "next/navigation";
+import { useTransactions } from "@/lib/use-transactions";
 
-export function HomeScreen({
-  setScreen,
-  onVoice,
-  expenses,
-  loading,
-  configured,
-  scrolled,
-  user,
-  onRowClick,
-}: {
-  setScreen: (s: Screen) => void;
-  onVoice: () => void;
-  expenses: Transaction[];
-  loading: boolean;
-  configured: boolean;
-  scrolled: boolean;
-  user: UserInfo;
-  onRowClick?: (item: Transaction) => void;
-}) {
+export function HomeScreen() {
+  const { user, setVoiceOpen } = useApp();
+  const router = useRouter();
+  const tx = useTransactions();
+
+  const expenses = tx.transactions;
+  const loading = tx.loading;
+  const configured = tx.configured;
   const empty = !loading && expenses.length === 0;
+
   return (
     <>
       <Header
         screen="home"
-        onVoice={onVoice}
-        scrolled={scrolled}
+        onVoice={() => setVoiceOpen(true)}
+        scrolled={false}
         displayName={user.name}
       />
       <main className="flex flex-col gap-5 px-5 pb-28 echo-stagger">
@@ -51,7 +43,7 @@ export function HomeScreen({
           <motion.button
             type="button"
             className="quick-action"
-            onClick={onVoice}
+            onClick={() => setVoiceOpen(true)}
             whileTap={{ scale: 0.97 }}
             whileHover={{ y: -2 }}
             transition={{ type: "spring", stiffness: 360, damping: 22 }}
@@ -69,7 +61,7 @@ export function HomeScreen({
           <motion.button
             type="button"
             className="quick-action"
-            onClick={() => setScreen("insights")}
+            onClick={() => router.push("/insights")}
             whileTap={{ scale: 0.97 }}
             whileHover={{ y: -2 }}
             transition={{ type: "spring", stiffness: 360, damping: 22 }}
@@ -87,7 +79,7 @@ export function HomeScreen({
         </div>
 
         {empty ? (
-          <EmptyState onVoice={onVoice} configured={configured} />
+          <EmptyState onVoice={() => setVoiceOpen(true)} configured={configured} />
         ) : (
           <>
             <div className="section-heading">
@@ -95,14 +87,14 @@ export function HomeScreen({
               <button
                 type="button"
                 className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-                onClick={() => setScreen("activity")}
+                onClick={() => router.push("/activity")}
               >
                 View all
               </button>
             </div>
             <div className="divide-y divide-border rounded-2xl bg-surface-1 px-3">
               {expenses.slice(0, 4).map((item, i) => (
-                <TransactionRow item={item} index={i} key={item.id} onClick={onRowClick} />
+                <TransactionRow item={item} index={i} key={item.id} onClick={() => {}} />
               ))}
             </div>
           </>
