@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
 import {
   deleteTransaction,
