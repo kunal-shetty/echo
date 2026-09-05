@@ -4,7 +4,7 @@
  * Handles updates and deletions of specific category records by ID.
  */
 
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
 import {
   deleteCategory,
