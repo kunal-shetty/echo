@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎙️ Echo — Multimodal Voice AI Finance Assistant
 
-## Getting Started
+**The fastest, most intuitive way to track your finances using voice.**
 
-First, run the development server:
+> **👉 [WATCH THE 5-MINUTE PITCH AND DEMO VIDEO HERE](LINK)**
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Echo is an end-to-end multimodal finance intelligence pipeline that transforms raw voice input into structured financial records in under 2 seconds. By combining local processing with high-performance cloud inference, Echo eliminates the friction of manual expense tracking.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🚀 Core Value Proposition
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Traditional expense tracking fails because of **manual friction**. Echo solves this by treating voice as the primary interface, leveraging a hybrid AI architecture to ensure near-instant response times and deterministic data accuracy.
 
-## Learn More
+### 🎯 Objectives
+- **Eliminate Legacy Friction:** Replaces tedious form-filling with natural conversation.
+- **Solve the Latency Problem:** Optimized pipeline keeps round-trip time $< 2s$.
+- **Reduce Compute Costs:** Hybrid processing reduces reliance on expensive cloud LLMs for simple tasks.
+- **Ensure Data Integrity:** Atomic persistence and transactional state management prevent data corruption.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🛠️ Technical Architecture
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Echo uses a sophisticated **2-Layer Processing Pipeline** to balance speed and intelligence.
 
-## Deploy on Vercel
+### 1. The Fast Path (Edge/Local)
+- **Voice Capture:** High-fidelity audio sampling.
+- **Transcription:** Local-first processing (Whisper Base) to convert speech to text without network round-trips.
+- **TTS:** Low-latency voice synthesis (Piper) for natural, immediate feedback.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 2. The Intelligence Path (Cloud Inference)
+- **Inference Engine:** Powered by **Groq** for ultra-fast LLM responses.
+- **Zero-Shot Intent Classification:** Natural language is classified into `create`, `update`, `delete`, or `query` intents in real-time.
+- **Deterministic Extraction:** Strict JSON schema enforcement ensures unstructured voice logs (e.g., *"Spent 500 bucks on dinner with team"*) are transformed into type-safe database records.
+- **Contextual Memory:** The parser is fed recent transaction history, allowing it to resolve references like *"change the last one to 600"* or *"delete that blinkit order"*.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 3. Data Layer
+- **Database:** Supabase (PostgreSQL) with transactional states.
+- **Merchant Intelligence:** A custom alias system that learns and canonicalizes merchant names (e.g., *"Zomato"*, *"Zomato Ltd"*, *"Zomato App"* $\rightarrow$ `Zomato`).
+
+---
+
+## 📊 Build Challenges & Solutions
+
+| Challenge | Solution |
+| :--- | :--- |
+| **High Conversational Latency** | Architected a hybrid pipeline. Local audio processing $\rightarrow$ Groq Cloud Inference. Total round-trip $< 2s$. |
+| **Unstructured Voice Logs** | Deployed zero-shot intent classification and strict JSON schema validation for atomic record creation. |
+| **State Management** | Implemented transactional database states to handle partial failures and network drops gracefully. |
+| **Merchant Ambiguity** | Engineered a merchant-alias resolution layer to maintain clean, canonical financial logs. |
+
+---
+
+## 🛠️ Getting Started
+
+### Prerequisites
+- Node.js 18+
+- Supabase Project
+- Groq API Key
+
+### Installation
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-username/echo.git
+   cd echo
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Set up your `.env` file:
+   ```env
+   GROQ_API_KEY=your_groq_key
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+   ```
+4. Run the development server:
+   ```bash
+   npm run dev
+   ```
+
+---
+
+## 📜 License
+MIT
