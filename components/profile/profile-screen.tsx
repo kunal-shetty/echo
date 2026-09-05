@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import {
   Bell,
@@ -31,12 +32,13 @@ interface Row {
 }
 
 export function ProfileScreen() {
+  const router = useRouter();
   const { user, updateUser, setVoiceOpen } = useApp();
   const [editing, setEditing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [draftName, setDraftName] = useState(user.name);
   const { user: remote } = useRemoteUser();
-  const displayName = user.name || "friend";
+  const displayName = user.name || "User";
 
   const syncNote = remote?.email_verified_at
     ? remote.email ?? "Verified"
@@ -56,9 +58,9 @@ export function ProfileScreen() {
         </span>
       ) : undefined,
     },
-    { icon: Bell, label: "Notifications", note: "Evening memory prompt" },
-    { icon: Settings, label: "App settings", note: "Appearance, security" },
-    { icon: CircleHelp, label: "Help & support", note: "FAQs and contact" },
+    { icon: Bell, label: "Notifications", note: "Evening memory prompt", onClick: () => router.push("/profile/notifications") },
+    { icon: Settings, label: "App settings", note: "Appearance, security", onClick: () => router.push("/profile/settings") },
+    { icon: CircleHelp, label: "Help & support", note: "FAQs and contact", onClick: () => router.push("/profile/help") },
   ];
 
   return (
@@ -114,6 +116,23 @@ export function ProfileScreen() {
               <ChevronRight size={17} className="text-muted-foreground" />
             </motion.button>
           ))}
+        </div>
+        <div className="flex justify-center gap-4 py-4">
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => router.push("/profile/privacy")}
+          >
+            Privacy Policy
+          </button>
+          <span className="text-xs text-muted-foreground">•</span>
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => router.push("/profile/terms")}
+          >
+            Terms of Service
+          </button>
         </div>
       </main>
       <BottomSheet
