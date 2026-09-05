@@ -1,6 +1,9 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { AppContextProvider } from "@/context/AppContext";
+import { OnboardingWrapper } from "@/components/onboarding-wrapper";
+import { AppShell } from "@/components/echo-shell";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 const geistMono = Geist_Mono({
@@ -48,8 +51,17 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-background">
       <body className={`${geist.variable} ${geistMono.variable} antialiased`}>
-        {children}
+        <AppContextProvider>
+          <OnboardingWrapper>
+            <AppShell>
+              {children}
+            </AppShell>
+          </OnboardingWrapper>
+        </AppContextProvider>
       </body>
     </html>
   );
 }
+
+
+
