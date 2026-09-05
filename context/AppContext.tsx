@@ -43,6 +43,12 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
     try {
       const done = window.localStorage.getItem("echo-onboarded-v1");
       const userRaw = window.localStorage.getItem("echo-user-info-v1");
