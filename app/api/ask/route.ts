@@ -17,6 +17,9 @@ export const runtime = "nodejs";
 interface AskBody {
   transcript?: string;
   sessionId?: string;
+  parseOnly?: boolean;
+  respondOnly?: boolean;
+  result?: any; // for respondOnly
 }
 
 interface AskResponse {
@@ -51,14 +54,6 @@ export async function POST(req: Request) {
     );
   }
 
-  const transcript = body.transcript?.trim();
-  if (!transcript) {
-    return NextResponse.json(
-      { error: "Missing 'transcript' field" },
-      { status: 400 },
-    );
-  }
-
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -70,6 +65,32 @@ export async function POST(req: Request) {
     );
   }
 
+  if (body.respondOnly) {
+    const transcript = body.transcript?.trim();
+    if (!transcript || !body.result) {
+      return NextResponse.json({ error: "Missing transcript or result" }, { status: 400 });
+    }
+    try {
+      const reasonedSpoken = await generateReasonedResponse(
+        transcript,
+        body.result,
+        [],
+        apiKey,
+      );
+      return NextResponse.json({ spoken: reasonedSpoken });
+    } catch (e) {
+      return NextResponse.json({ error: "Response generation failed" }, { status: 500 });
+    }
+  }
+
+  const transcript = body.transcript?.trim();
+  if (!transcript) {
+    return NextResponse.json(
+      { error: "Missing 'transcript' field" },
+      { status: 400 },
+    );
+  }
+
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
       { error: "Backend not configured." },
@@ -77,7 +98,10 @@ export async function POST(req: Request) {
     );
   }
 
-  // Parse. We don't need recent transactions for queries (no edit/delete).
+  const { getCurrentUserId } = await import("@/lib/server/user");
+  const userId = await getCurrentUserId();
+
+  // Parse.
   let parsed: ParseResult;
   try {
     parsed = await parseTranscript(transcript, apiKey);
@@ -86,9 +110,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
+  if (body.parseOnly) {
+    return NextResponse.json({ result: parsed });
+  }
+
   // If the parser said something else (e.g. "create"), still try to answer
-  // by overriding action → query. The user clearly asked a question even if
-  // the parser was confused.
+  // by overriding action → query.
   const kind: QueryKind =
     parsed.action === "query" && parsed.queryKind
       ? parsed.queryKind
@@ -102,32 +129,33 @@ export async function POST(req: Request) {
     limit: parsed.queryLimit,
     direction:
       parsed.queryDirection ?? defaultDirectionForQuery(transcript),
+    nlqSpec: parsed.nlqSpec,
   };
 
   try {
     const result = await runQuery(filters);
 
     // Fetch conversation history for this session to provide context to Groq.
-    let history = [];
+    let history: any[] = [];
     if (body.sessionId) {
-      const supabase = (await import("@/lib/server/supabase")).getSupabaseAdmin();
+      const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+      const supabase = getSupabaseAdmin();
       const { data: sessions } = await supabase
         .from("voice_sessions")
         .select("transcript, parsed_intent")
-        .eq("user_id", userId) // assuming userId is available in scope
-        .eq("device", body.sessionId) // using device as session id for now
+        .eq("user_id", userId)
+        .eq("device", body.sessionId)
         .order("started_at", { ascending: true })
         .limit(5);
       if (sessions) history = sessions;
     }
 
-    // Generate a reasoned, conversational response using Groq instead of templates.
     const reasonedSpoken = await generateReasonedResponse(
       transcript,
       result,
       history,
       apiKey,
-    ).catch(() => result.spoken); // Fallback to template if Groq fails
+    ).catch(() => result.spoken);
 
     const response: AskResponse = {
       result: { ...parsed, action: "query", queryKind: kind },
@@ -142,9 +170,9 @@ export async function POST(req: Request) {
       },
     };
 
-    // Save this turn to voice_sessions for future context.
     if (body.sessionId) {
-      const supabase = (await import("@/lib/server/supabase")).getSupabaseAdmin();
+      const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+      const supabase = getSupabaseAdmin();
       await supabase.from("voice_sessions").insert({
         user_id: userId,
         started_at: new Date().toISOString(),
