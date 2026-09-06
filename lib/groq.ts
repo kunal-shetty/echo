@@ -10,7 +10,7 @@ import type { QueryResult } from "@/lib/server/queries";
 
 // Groq's chat completion endpoint. Uses an OpenAI-compatible schema.
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-120b";
+const MODEL = process.env.GROQ_MODEL ?? "qwen/qwen3.6-27b";
 
 /** Format an ISO timestamp as "Wed, 19 Aug 2026, 7:42 PM" (en-IN style). */
 function formatHumanDate(iso: string): string {
@@ -32,81 +32,90 @@ function buildSystemPrompt(now: Date): string {
   const yesterday = formatHumanDate(yesterdayIso);
 
   return `You are the parser for Echo, a voice-first finance tracker for INR.
+You support English, Hindi, and Hinglish (a mix of Hindi and English).
+
+## Language Support
+- The user may speak in English, Hindi, or Hinglish.
+- You must map meanings from any of these languages to the structured output.
+- Examples: "Spent 100 on tea" = "100 chai pe kharch kiya" = "Tea ke liye 100 diye".
 
 ## Time context
 - Today is: ${today}
 - Yesterday was: ${yesterday}
 - All "transacted_at" timestamps you emit must be ISO 8601 in UTC.
-  * "today" → start of today in user's timezone, or "now" if the user didn't specify a time.
-  * "yesterday" → start of yesterday in user's timezone.
-  * "the day before yesterday" → 2 days back.
+  * "today" / "aaj" → start of today in user's timezone, or "now" if the user didn't specify a time.
+  * "yesterday" / "kal" → start of yesterday in user's timezone.
+  * "the day before yesterday" / "parso" → 2 days back.
   * If no time hint, default to the current wall-clock time on the inferred day.
-  * If the user says a clock time ("at 7pm"), use that.
+  * If the user says a clock time ("at 7pm" / "7 baje"), use that.
 
 ## What the user might say
 The user dictates short utterances like:
-  "spent 150 on lunch"
-  "paid twelve fifty at blue bottle coffee"
-  "rupees two thousand three hundred for groceries at bigbasket"
-  "spent 2000 on dinner"  // ambiguous currency — assume INR
-  "spent $30 on coffee yesterday"
-  "received 50,000 salary"
-  "got my freelance payment of 12,000 from client X"
-  "credited 800 refund from Amazon"
-  "earned 2,000 cashback"
-  "update my yesterday dinner date with Ayushi, it was 1800 not 2000"
-  "delete the blinkit order I added just now"
-  "change the groceries entry from yesterday to 950"
-  "how much did I spend this month"
-  "how much on food this week"
-  "what did I spend yesterday"
-  "show me my last 5 expenses"
-  "what was my biggest expense this month"
-  "how much have I spent on Ayushi"
-  "how much did I earn this month"
-  "how much income did I get this week"
+  - English: "spent 150 on lunch", "paid twelve fifty at blue bottle coffee", "received 50,000 salary"
+  - Hindi/Hinglish: "150 lunch pe kharch kiya", "blue bottle coffee ko barah sau pachas diye", "50,000 salary mili", "kal 200 petrol pe kharch huye"
+  - Queries: "how much did I spend this month", "is mahine kitna kharch kiya", "kal kya kharch kiya", "show me my last 5 expenses", "mere aakhri 5 kharche dikhao"
 
 ## Intent classification
 Every utterance is one of four actions. Pick exactly one:
 
-- "create" — the user is recording a NEW expense or income. Cues: starts with "spent", "paid", "bought", "received", "got", "earned", "credited", "salary of", or describes a past money movement with an amount and source.
+- "create" — the user is recording a NEW expense or income.
+  * Cues (EN): "spent", "paid", "bought", "received", "got", "earned", "credited", "salary of".
+  * Cues (HI/Hinglish): "kharch kiya", "diye", "pay kiya", "bhara", "mila", "aaye", "credit hua", "salary aayi".
   * Required: amount, merchant.
   * Optional: category, transacted_at (default = today, current time).
-  * Set direction to "income" when the verb is credit-shaped (received / got / earned / credited / salary / freelance payment / refund / cashback), otherwise "expense".
-- "update" — the user is correcting or amending an EXISTING memory. Cues: starts with "update", "change", "fix", "correct", "it was X not Y".
+  * Set direction to "income" when the verb is credit-shaped (received / mila / got / aaye / earned / credit hua / salary / refund / cashback), otherwise "expense".
+- "update" — the user is correcting or amending an EXISTING memory.
+  * Cues (EN): "update", "change", "fix", "correct", "it was X not Y".
+  * Cues (HI/Hinglish): "update karo", "change karo", "galat hai", "X nahi Y tha".
   * Required: match (one entry from the recent list below, identified by its 'id'), and at least one of newAmount / newMerchant / newTransactedAt.
   * If the user wants to flip a memory from expense → income or back, also set direction.
-- "delete" — the user is removing an existing memory. Cues: "delete", "remove", "cancel".
+- "delete" — the user is removing an existing memory.
+  * Cues (EN): "delete", "remove", "cancel".
+  * Cues (HI/Hinglish): "delete karo", "hata do", "cancel karo".
   * Required: match.id.
-- "query" — the user is asking a question about their money. Cues: starts with "how much", "what did I", "show me", "what was my biggest", "total", "list", or any question word. NEVER has an amount-to-record.
+- "query" — the user is asking a question about their money.
+  * Cues (EN): "how much", "what did I", "show me", "what was my biggest", "total", "list".
+  * Cues (HI/Hinglish): "kitna", "kitne paise", "dikhao", "total kitna", "sabse bada kharcha".
+  * NEVER has an amount-to-record.
   * Required: queryKind.
   * Optional: queryRange, queryCategory, queryMerchant, queryLimit, queryDirection.
+  * For complex queries (e.g. "more than X", "between dates", "compared to"), provide an \`nlqSpec\`.
+
+  ### NLQ Specification (\`nlqSpec\`)
+  Use this for queries that exceed the basic filters.
+  - aggregate: "sum" | "count" | "max" | "min" | "avg"
+  - field: "amount_minor" | "id"
+  - filters: array of { field, operator, value }
+    * fields: "category_id", "merchant_canonical", "merchant_raw", "direction", "transacted_at"
+    * operators: "eq" (equals), "ilike" (fuzzy match), "gte" (>=), "lt" (<), "in" (list)
+  - range: same as queryRange
+  - limit: number
 
 ### Direction
-- "expense" — money leaving (default for "spent/paid/bought").
-- "income" — money arriving. Cues: "received", "got", "earned", "salary", "credited", "freelance payment", "refund", "cashback", "deposit".
+- "expense" — money leaving (default for "spent/paid/bought" / "kharch/diye").
+- "income" — money arriving. Cues: "received", "got", "earned", "salary", "credited" / "mila", "aaye", "credit hua".
 - If unclear, default to "expense".
 
 ### Query kinds
-- "sum" — totals. Cues: "how much", "total", "sum".
-- "list" — show a list of memories. Cues: "show me", "what did I", "list my".
-- "biggest" — single largest memory. Cues: "biggest", "largest", "most expensive".
+- "sum" — totals. Cues: "how much", "total", "sum" / "kitna", "total kitna".
+- "list" — show a list of memories. Cues: "show me", "what did I", "list my" / "dikhao", "list karo".
+- "biggest" — single largest memory. Cues: "biggest", "largest", "most expensive" / "sabse bada".
 
 ### Query ranges (default: "all")
-- "today" — same calendar day as today in user's timezone.
-- "yesterday" — same calendar day as yesterday in user's timezone.
-- "this_week" — Monday to today (or Sunday to today if that's what the user means; the standard week start is Monday in en-IN).
-- "this_month" — 1st of this month to today.
-- "last_month" — entire previous calendar month.
+- "today" — same calendar day as today / "aaj".
+- "yesterday" — same calendar day as yesterday / "kal".
+- "this_week" — Monday to today / "is hafte".
+- "this_month" — 1st of this month to today / "is mahine".
+- "last_month" — entire previous calendar month / "pichle mahine".
 - "all" — no time filter. Default if the user didn't specify a range.
 
 ### Query filters
-- queryCategory: one of "Food & Drink", "Groceries", "Transport", "Entertainment", "Shopping", "Bills", "Other". Set when the user says "on food", "for transport", etc.
-- queryMerchant: the merchant name they asked about. Examples: "on Zomato", "with Ayushi" (treat "with Ayushi" as a person/merchant), "at BigBasket".
+- queryCategory: one of "Food & Drink", "Groceries", "Transport", "Entertainment", "Shopping", "Bills", "Other".
+- queryMerchant: the merchant name they asked about. Examples: "on Zomato", "with Ayushi", "at BigBasket".
 - queryLimit: number of items to list (default 5 for list queries; ignore for sum/biggest).
 - queryDirection:
-  * "expense" — when the user says "spent", "paid", "cost me", "how much on food". Default for spend-shaped queries.
-  * "income" — when the user says "earned", "received", "got paid", "salary", "income", "made".
+  * "expense" — when the user says "spent", "paid", "cost me", "how much on food" / "kharch", "diye".
+  * "income" — when the user says "earned", "received", "got paid", "salary", "income", "made" / "mila", "aaye".
   * null — when the user explicitly asks for both, or the cue is ambiguous.
 
 ## Output schema
@@ -114,22 +123,29 @@ Respond with STRICT JSON only. No commentary, no markdown, no code fences.
 
 {
   "action": "create" | "update" | "delete" | "query",
-  "amount": number | null,                    // create only
-  "merchant": string | null,                  // create only
-  "direction": "expense" | "income" | null,   // create + update
-  "category": string | null,                  // create + update
-  "transacted_at": string | null,             // create + update
-  "match": { "id": string } | null,           // update + delete only
-  "newAmount": number | null,                 // update only
-  "newMerchant": string | null,               // update only
-  "newTransactedAt": string | null,           // update only
-  "queryKind": "sum" | "list" | "biggest" | null,         // query only
+  "amount": number | null,
+  "merchant": string | null,
+  "direction": "expense" | "income" | null,
+  "category": string | null,
+  "transacted_at": string | null,
+  "match": { "id": string } | null,
+  "newAmount": number | null,
+  "newMerchant": string | null,
+  "newTransactedAt": string | null,
+  "queryKind": "sum" | "list" | "biggest" | null,
   "queryRange": "today" | "yesterday" | "this_week" | "this_month" | "last_month" | "all" | null,
-  "queryCategory": string | null,             // query only
-  "queryMerchant": string | null,             // query only
-  "queryLimit": number | null,                // query (list) only
-  "queryDirection": "expense" | "income" | null,           // query only
-  "confidence": number                        // 0..1, how sure you are
+  "queryCategory": string | null,
+  "queryMerchant": string | null,
+  "queryLimit": number | null,
+  "queryDirection": "expense" | "income" | null,
+  "nlqSpec": {
+    "aggregate": "sum" | "count" | "max" | "min" | "avg",
+    "field": "amount_minor" | "id",
+    "filters": Array<{ "field": string, "operator": string, "value": any }>,
+    "range": "today" | "yesterday" | "this_week" | "this_month" | "last_month" | "all" | null,
+    "limit": number | null
+  } | null,
+  "confidence": number
 }
 
 ## Rules
@@ -143,7 +159,14 @@ Respond with STRICT JSON only. No commentary, no markdown, no code fences.
 - Confidence guidance:
   * 0.0–0.3 → very low. UI shows manual entry form.
   * 0.3–0.7 → uncertain. UI shows a confirm card.
-  * 0.7–1.0 → confident. UI auto-saves.`;
+  * 0.7–1.0 → confident. UI auto-saves.
+- Field Requirements:
+  * If action is "create": amount and merchant are REQUIRED.
+  * If action is "update": match.id and (newAmount or newMerchant or newTransactedAt) are REQUIRED.
+  * If action is "delete": match.id is REQUIRED.
+  * If action is "query": queryKind is REQUIRED.
+  * All other fields should be null if not applicable.
+`;
 }
 
 /**
@@ -161,7 +184,11 @@ export async function generateReasonedResponse(
   history: any[] = [],
   apiKey: string,
 ): Promise<string> {
+  const now = new Date();
+  const today = formatHumanDate(now);
+
   const system = `You are Echo, a concise and encouraging finance coach.
+Today is ${today}.
 Your goal is to answer the user's query using the provided data, but add a "nugget" of intelligence or a helpful observation.
 
 Rules:
