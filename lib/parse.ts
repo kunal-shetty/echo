@@ -18,6 +18,22 @@ export type QueryRange =
   | "last_month"
   | "all";
 
+export type NLQOperator = "eq" | "ilike" | "gte" | "lt" | "in";
+
+export interface NLQFilter {
+  field: "category_id" | "merchant_canonical" | "merchant_raw" | "direction" | "transacted_at";
+  operator: NLQOperator;
+  value: any;
+}
+
+export interface NLQSpecification {
+  aggregate: "sum" | "count" | "max" | "min" | "avg";
+  field: "amount_minor" | "id";
+  filters: NLQFilter[];
+  range: QueryRange | null;
+  limit?: number;
+}
+
 /**
  * Determines the default query kind based on keywords in the transcript.
  * Used as a fallback when the LLM does not explicitly specify a query kind.
@@ -76,8 +92,11 @@ export type ParseResult = {
   queryLimit: number | null;
   /** Whether the query is about spend or income. Null = both. */
   queryDirection: "expense" | "income" | null;
+  /** Advanced NLQ specification for complex queries. */
+  nlqSpec?: NLQSpecification;
   /** 0–1 confidence in the parse. */
   confidence: number;
+
   /** The raw transcript Echo heard. */
   transcript: string;
 };
