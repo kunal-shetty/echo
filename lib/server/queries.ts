@@ -7,7 +7,7 @@
 
 import { getSupabaseAdmin } from "@/lib/server/supabase";
 import { getCurrentUserId } from "@/lib/server/user";
-import type { QueryKind, QueryRange } from "@/lib/parse";
+import type { QueryKind, QueryRange, NLQSpecification } from "@/lib/parse";
 import type { Transaction } from "@/lib/schema";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
 import { listSystemCategories } from "@/lib/server/categories";
@@ -26,6 +26,8 @@ export interface QueryFilters {
   limit: number | null;
   /** Restrict to a specific direction. Null = both. */
   direction: "expense" | "income" | null;
+  /** Advanced NLQ specification for complex queries. */
+  nlqSpec?: NLQSpecification;
 }
 
 /** The structured result of a financial query, including conversational summaries. */
@@ -47,6 +49,23 @@ export interface QueryResult {
     categoryName: string | null;
     merchant: string | null;
   };
+}
+
+/**
+ * Aggregates a list of transactions based on an NLQ specification.
+ */
+function aggregateNlq(spec: NLQSpecification, rows: any[]): number | null {
+  const amounts = rows.map(r => Number(r.amount_minor));
+  if (amounts.length === 0) return null;
+
+  switch (spec.aggregate) {
+    case "sum": return amounts.reduce((a, b) => a + b, 0);
+    case "count": return amounts.length;
+    case "max": return Math.max(...amounts);
+    case "min": return Math.min(...amounts);
+    case "avg": return Math.round(amounts.reduce((a, b) => a + b, 0) / amounts.length);
+    default: return null;
+  }
 }
 
 /** Resolve a [start, end) UTC range for the named period. */
@@ -178,20 +197,38 @@ export async function runQuery(
     .eq("user_id", userId)
     .is("deleted_at", null)
     .order("transacted_at", { ascending: false });
-  if (bounds) {
-    q = q
-      .gte("transacted_at", bounds[0].toISOString())
-      .lt("transacted_at", bounds[1].toISOString());
-  }
-  if (categoryId) q = q.eq("category_id", categoryId);
-  if (filters.direction) q = q.eq("direction", filters.direction);
-  if (filters.merchant) {
-    // Match canonical OR raw; case-insensitive ilike for fuzzy-ish behavior.
-    q = q.or(
-      `merchant_canonical.ilike.%${filters.merchant}%,merchant_raw.ilike.%${filters.merchant}%`,
-    );
+
+  if (filters.nlqSpec) {
+    const { filters: nlqFilters, range: nlqRange } = filters.nlqSpec;
+    const nlqBounds = rangeBounds(nlqRange ?? "all", new Date());
+    if (nlqBounds) {
+      q = q
+        .gte("transacted_at", nlqBounds[0].toISOString())
+        .lt("transacted_at", nlqBounds[1].toISOString());
+    }
+    for (const f of nlqFilters) {
+      if (f.operator === "eq") q = q.eq(f.field, f.value);
+      else if (f.operator === "ilike") q = q.ilike(f.field, `%${f.value}%`);
+      else if (f.operator === "gte") q = q.gte(f.field, f.value);
+      else if (f.operator === "lt") q = q.lt(f.field, f.value);
+      else if (f.operator === "in") q = q.in(f.field, f.value);
+    }
+  } else {
+    if (bounds) {
+      q = q
+        .gte("transacted_at", bounds[0].toISOString())
+        .lt("transacted_at", bounds[1].toISOString());
+    }
+    if (categoryId) q = q.eq("category_id", categoryId);
+    if (filters.direction) q = q.eq("direction", filters.direction);
+    if (filters.merchant) {
+      q = q.or(
+        `merchant_canonical.ilike.%${filters.merchant}%,merchant_raw.ilike.%${filters.merchant}%`,
+      );
+    }
   }
   // Cap the underlying fetch so a "list all" doesn't pull thousands of rows.
+
   const fetchLimit = 200;
   q = q.limit(fetchLimit);
 
@@ -216,11 +253,14 @@ export async function runQuery(
   const uiRows = top.map((r) => toUiTransaction(r, uiCats));
 
   const total =
-    filters.kind === "biggest"
-      ? uiRows[0]
-        ? Number(uiRows[0].amountMinor)
-        : null
-      : top.reduce((acc, r) => acc + Number(r.amount_minor), 0);
+    filters.nlqSpec
+      ? aggregateNlq(filters.nlqSpec, top)
+      : filters.kind === "biggest"
+        ? uiRows[0]
+          ? Number(uiRows[0].amountMinor)
+          : null
+        : top.reduce((acc, r) => acc + Number(r.amount_minor), 0);
+
 
   const headline = buildHeadline(filters, total ?? 0, uiRows.length);
   const spoken = buildSpoken(filters, total ?? 0, uiRows.length);
