@@ -239,12 +239,6 @@ export async function POST(req: Request) {
     }
 
     const accountId = await defaultAccountId(userId);
-    if (!accountId) {
-      return NextResponse.json(
-        { error: "No default account for this user." },
-        { status: 500 },
-      );
-    }
 
     const resolved = await resolveMerchant(parsed.merchant);
     const merchantCanonical = resolved.canonical;
@@ -279,21 +273,24 @@ export async function POST(req: Request) {
 
     const transactedAt = parsed.transactedAt ?? new Date().toISOString();
 
-    const row = await createTransaction({
-      account_id: accountId,
-      category_id: categoryId,
-      amount_minor: parsed.amount,
-      currency: "INR",
-      direction: parsed.direction ?? "expense",
-      merchant_raw: parsed.merchant,
-      merchant_canonical: merchantCanonical,
-      note: null,
-      source: "voice",
-      confidence: parsed.confidence,
-      raw_transcript: transcript,
-      transacted_at: transactedAt,
-      clarified: false,
-    });
+    let row = null;
+    if (accountId) {
+      row = await createTransaction({
+        account_id: accountId,
+        category_id: categoryId,
+        amount_minor: parsed.amount,
+        currency: "INR",
+        direction: parsed.direction ?? "expense",
+        merchant_raw: parsed.merchant,
+        merchant_canonical: merchantCanonical,
+        note: null,
+        source: "voice",
+        confidence: parsed.confidence,
+        raw_transcript: transcript,
+        transacted_at: transactedAt,
+        clarified: false,
+      });
+    }
 
     response.draft = {
       amount: parsed.amount,
@@ -304,7 +301,11 @@ export async function POST(req: Request) {
       rawTranscript: transcript,
       confidence: parsed.confidence,
     };
-    response.transaction = toUiTransaction(row, indexed);
+    if (row) {
+      response.transaction = toUiTransaction(row, indexed);
+    } else {
+      response.warning = "No default account found. Saving to local storage.";
+    }
     return NextResponse.json(response);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Intent failed";
