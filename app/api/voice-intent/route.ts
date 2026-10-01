@@ -7,10 +7,7 @@
  */
 
 import { NextResponse } from "next/server.js";
-import {
-  isSupabaseConfigured,
-  getSupabaseAdmin,
-} from "@/lib/server/supabase";
+import { isSupabaseConfigured, getSupabaseAdmin } from "@/lib/server/supabase";
 import {
   createTransaction,
   deleteTransaction,
@@ -94,10 +91,7 @@ export async function POST(req: Request) {
   try {
     body = (await req.json()) as IntentBody;
   } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON body" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   const transcript = body.transcript?.trim();
@@ -128,10 +122,7 @@ export async function POST(req: Request) {
 
   const userId = await getCurrentUserId();
   if (!userId) {
-    return NextResponse.json(
-      { error: "No device identity." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "No device identity." }, { status: 400 });
   }
 
   // Recent transactions for parser context (last 5).
@@ -245,7 +236,8 @@ export async function POST(req: Request) {
 
     let categoryId =
       pickCategoryId(parsed.category, sysCats) ??
-      (resolved.alias?.category_id ?? null);
+      resolved.alias?.category_id ??
+      null;
 
     if (!categoryId && parsed.category) {
       try {
