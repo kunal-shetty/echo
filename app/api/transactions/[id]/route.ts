@@ -129,7 +129,10 @@ export async function PATCH(
   if (raw.category_id !== undefined) {
     if (raw.category_id === null) {
       body.category_id = null;
-    } else if (typeof raw.category_id !== "string" || !isUuid(raw.category_id)) {
+    } else if (
+      typeof raw.category_id !== "string" ||
+      !isUuid(raw.category_id)
+    ) {
       return NextResponse.json(
         { error: "category_id must be a uuid or null" },
         { status: 400 },
