@@ -738,14 +738,30 @@ button {
 .echo-stagger > * {
   animation: echoIn 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.echo-stagger > *:nth-child(1) { animation-delay: 0.04s; }
-.echo-stagger > *:nth-child(2) { animation-delay: 0.08s; }
-.echo-stagger > *:nth-child(3) { animation-delay: 0.12s; }
-.echo-stagger > *:nth-child(4) { animation-delay: 0.16s; }
-.echo-stagger > *:nth-child(5) { animation-delay: 0.2s; }
-.echo-stagger > *:nth-child(6) { animation-delay: 0.24s; }
-.echo-stagger > *:nth-child(7) { animation-delay: 0.28s; }
-.echo-stagger > *:nth-child(8) { animation-delay: 0.32s; }
+.echo-stagger > *:nth-child(1) {
+  animation-delay: 0.04s;
+}
+.echo-stagger > *:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.echo-stagger > *:nth-child(3) {
+  animation-delay: 0.12s;
+}
+.echo-stagger > *:nth-child(4) {
+  animation-delay: 0.16s;
+}
+.echo-stagger > *:nth-child(5) {
+  animation-delay: 0.2s;
+}
+.echo-stagger > *:nth-child(6) {
+  animation-delay: 0.24s;
+}
+.echo-stagger > *:nth-child(7) {
+  animation-delay: 0.28s;
+}
+.echo-stagger > *:nth-child(8) {
+  animation-delay: 0.32s;
+}
 
 /* View-transition hooks used by React 19's <ViewTransition>.
  * These names are referenced from `echo-shell.tsx`. */
