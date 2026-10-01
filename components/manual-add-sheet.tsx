@@ -162,7 +162,11 @@ export function ManualAddSheet({
             value={amount}
             onChange={setAmount}
             currency="INR"
-            label={mode === "edit" ? `Was ${money(initial?.amountMinor ?? 0, "INR")}` : "How much?"}
+            label={
+              mode === "edit"
+                ? `Was ${money(initial?.amountMinor ?? 0, "INR")}`
+                : "How much?"
+            }
           />
 
           <Field
