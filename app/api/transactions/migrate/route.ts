@@ -5,7 +5,10 @@ import { bulkCreateTransactions } from "@/lib/server/transactions";
 
 export async function POST(req: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Backend not configured." }, { status: 503 });
+    return NextResponse.json(
+      { error: "Backend not configured." },
+      { status: 503 },
+    );
   }
 
   const userId = await getCurrentUserId();
@@ -18,7 +21,10 @@ export async function POST(req: Request) {
     const transactions = body.transactions;
 
     if (!Array.isArray(transactions)) {
-      return NextResponse.json({ error: "Invalid input: transactions must be an array." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid input: transactions must be an array." },
+        { status: 400 },
+      );
     }
 
     // We use the existing bulkCreateTransactions, but we must ensure it's
