@@ -34,10 +34,16 @@ const DEFAULT_USER: UserInfo = {
 
 export const AppContext = createContext<AppContextType | undefined>(undefined);
 
-export function AppContextProvider({ children }: { children: React.ReactNode }) {
+export function AppContextProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [user, setUser] = useState<UserInfo>(DEFAULT_USER);
   const [onboarded, setOnboarded] = useState(false);
-  const [addMode, setAddMode] = useState<"single" | "bulk" | "category" | null>(null);
+  const [addMode, setAddMode] = useState<"single" | "bulk" | "category" | null>(
+    null,
+  );
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -75,8 +81,10 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
 
     const serverPatch: Record<string, unknown> = {};
     if (patch.name !== undefined) serverPatch.display_name = patch.name;
-    if (patch.currency !== undefined) serverPatch.home_currency = patch.currency;
-    if (patch.reminderTime !== undefined) serverPatch.reminder_time = patch.reminderTime;
+    if (patch.currency !== undefined)
+      serverPatch.home_currency = patch.currency;
+    if (patch.reminderTime !== undefined)
+      serverPatch.reminder_time = patch.reminderTime;
     if (Object.keys(serverPatch).length === 0) return;
 
     void fetch("/api/me", {
