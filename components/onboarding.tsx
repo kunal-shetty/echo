@@ -149,8 +149,10 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       amountMinor: amountValue,
       currency: "INR",
       direction,
-      merchantRaw: merchantValue || (direction === "income" ? "Income" : "Expense"),
-      merchantCanonical: merchantValue || (direction === "income" ? "Income" : "Expense"),
+      merchantRaw:
+        merchantValue || (direction === "income" ? "Income" : "Expense"),
+      merchantCanonical:
+        merchantValue || (direction === "income" ? "Income" : "Expense"),
       transactedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       source: mode === "manual" ? "manual" : "voice",
@@ -160,19 +162,19 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           ? null
           : transcript || `spent ${amountValue} on ${merchantValue}`,
       clarified: false,
-      icon: (merchantValue || (direction === "income" ? "I" : "E")).charAt(0).toUpperCase(),
+      icon: (merchantValue || (direction === "income" ? "I" : "E"))
+        .charAt(0)
+        .toUpperCase(),
       tone: cat?.tone ?? "neutral",
       date: "Today, just now",
       categoryName: cat?.name ?? null,
     };
   };
 
-  const handleExpenseSave = (
-    amountValue: number,
-    merchantValue: string,
-  ) => {
+  const handleExpenseSave = (amountValue: number, merchantValue: string) => {
     const finalAmount = amountValue > 0 ? amountValue : confirmedAmount;
-    const finalMerchant = merchantValue || (direction === "income" ? "Income" : "Lunch");
+    const finalMerchant =
+      merchantValue || (direction === "income" ? "Income" : "Lunch");
     speech.stop();
     setStep("remembered");
     if (advanceTimer.current) clearTimeout(advanceTimer.current);
@@ -348,9 +350,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               placeholder="e.g. Kunal"
               autoFocus
               value={user.name}
-              onChange={(e) =>
-                setUser((u) => ({ ...u, name: e.target.value }))
-              }
+              onChange={(e) => setUser((u) => ({ ...u, name: e.target.value }))}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && user.name.trim()) {
                   setStep("preferences");
@@ -422,7 +422,11 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                 options={REMINDER_OPTIONS.map((r) => ({
                   value: r,
                   label:
-                    r === "off" ? "Off" : r === "morning" ? "Morning" : "Evening",
+                    r === "off"
+                      ? "Off"
+                      : r === "morning"
+                        ? "Morning"
+                        : "Evening",
                 }))}
                 size="sm"
               />
@@ -615,8 +619,8 @@ function ConfirmPanel({
       </div>
       <p className="mt-5 text-sm text-muted-foreground">
         I heard you spent{" "}
-        <span className="font-medium text-foreground">{money(amount)}</span>{" "}
-        on <span className="font-medium text-foreground">{merchant}</span>.
+        <span className="font-medium text-foreground">{money(amount)}</span> on{" "}
+        <span className="font-medium text-foreground">{merchant}</span>.
       </p>
       <p className="mt-1 text-sm text-muted-foreground">
         Did you mean {money(amount)} or {money(alt)}?
@@ -699,9 +703,7 @@ function ManualPanel({
         </p>
       )}
       <div>
-        <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-          Type
-        </p>
+        <p className="mb-1.5 text-xs font-medium text-muted-foreground">Type</p>
         <Segmented<"expense" | "income">
           ariaLabel="onboarding-direction"
           value={direction}
@@ -715,9 +717,7 @@ function ManualPanel({
       </div>
       <Field
         label={
-          direction === "income"
-            ? "What did you receive?"
-            : "What was it for?"
+          direction === "income" ? "What did you receive?" : "What was it for?"
         }
         placeholder={direction === "income" ? "e.g. Salary" : "e.g. Lunch"}
         autoFocus
