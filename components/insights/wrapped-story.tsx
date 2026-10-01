@@ -5,7 +5,12 @@ import { Sparkles, TrendingUp, AlertCircle, Heart } from "lucide-react";
 import { money } from "@/lib/fmt";
 
 interface WrappedInsight {
-  kind: "spend_pattern" | "anomaly" | "trend" | "subscription_check" | "budget_alert";
+  kind:
+    | "spend_pattern"
+    | "anomaly"
+    | "trend"
+    | "subscription_check"
+    | "budget_alert";
   payload: {
     title: string;
     text: string;
@@ -34,14 +39,22 @@ export function WrappedStory({ insights }: { insights: WrappedInsight[] }) {
             transition={{ delay: i * 0.1 }}
           >
             <div className="flex items-start gap-4 p-1">
-              <div className={`size-10 shrink-0 rounded-full flex items-center justify-center ${
-                insight.kind === 'anomaly' ? 'bg-orange-soft text-orange' :
-                insight.kind === 'spend_pattern' ? 'bg-blue-soft text-blue' :
-                'bg-emerald-soft text-emerald'
-              }`}>
-                {insight.kind === 'anomaly' ? <AlertCircle size={20} /> :
-                 insight.kind === 'spend_pattern' ? <TrendingUp size={20} /> :
-                 <Heart size={20} />}
+              <div
+                className={`size-10 shrink-0 rounded-full flex items-center justify-center ${
+                  insight.kind === "anomaly"
+                    ? "bg-orange-soft text-orange"
+                    : insight.kind === "spend_pattern"
+                      ? "bg-blue-soft text-blue"
+                      : "bg-emerald-soft text-emerald"
+                }`}
+              >
+                {insight.kind === "anomaly" ? (
+                  <AlertCircle size={20} />
+                ) : insight.kind === "spend_pattern" ? (
+                  <TrendingUp size={20} />
+                ) : (
+                  <Heart size={20} />
+                )}
               </div>
               <div className="flex flex-col gap-1">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
