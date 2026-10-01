@@ -43,8 +43,7 @@ export function BulkAddSheet({ open, onClose, onComplete }: BulkAddSheetProps) {
   );
 
   const validations = useMemo(
-    () =>
-      parsed.rows.map((r) => ({ row: r, result: validateRow(r) })),
+    () => parsed.rows.map((r) => ({ row: r, result: validateRow(r) })),
     [parsed],
   );
 
@@ -62,7 +61,17 @@ export function BulkAddSheet({ open, onClose, onComplete }: BulkAddSheetProps) {
 
   const handleImport = async () => {
     const rows = validations
-      .filter((v): v is { row: ParsedBulkRow; result: { ok: true; row: import("@/lib/use-transactions").BulkRowInput } } => v.result.ok)
+      .filter(
+        (
+          v,
+        ): v is {
+          row: ParsedBulkRow;
+          result: {
+            ok: true;
+            row: import("@/lib/use-transactions").BulkRowInput;
+          };
+        } => v.result.ok,
+      )
       .map((v) => v.result.row);
     if (rows.length === 0) return;
     setStep("importing");
