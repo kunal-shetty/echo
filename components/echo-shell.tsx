@@ -78,9 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-viewport">
       <div className="app-frame">
-        <div className="app-content">
-          {children}
-        </div>
+        <div className="app-content">{children}</div>
         <BottomNav
           onVoice={() => {
             setVoiceOpen(true);
