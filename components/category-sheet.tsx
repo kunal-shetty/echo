@@ -48,7 +48,8 @@ export function CategorySheet({
     setError(null);
   }, [open, initial]);
 
-  const canSave = name.trim().length > 0 && name.trim().length <= 40 && !submitting;
+  const canSave =
+    name.trim().length > 0 && name.trim().length <= 40 && !submitting;
 
   const handleSave = async () => {
     if (!canSave) return;
