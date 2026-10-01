@@ -41,12 +41,21 @@ export function ProfileScreen() {
   const displayName = user.name || "User";
 
   const syncNote = remote?.email_verified_at
-    ? remote.email ?? "Verified"
+    ? (remote.email ?? "Verified")
     : "Use Echo on another device";
 
   const rows: Row[] = [
-    { icon: UserRound, label: "Personal details", note: "Name, email, preferences", onClick: () => setEditing(true) },
-    { icon: CreditCard, label: "Connected accounts", note: "2 accounts connected" },
+    {
+      icon: UserRound,
+      label: "Personal details",
+      note: "Name, email, preferences",
+      onClick: () => setEditing(true),
+    },
+    {
+      icon: CreditCard,
+      label: "Connected accounts",
+      note: "2 accounts connected",
+    },
     {
       icon: Cloud,
       label: "Sync across devices",
@@ -58,14 +67,33 @@ export function ProfileScreen() {
         </span>
       ) : undefined,
     },
-    { icon: Bell, label: "Notifications", note: "Evening memory prompt", onClick: () => router.push("/profile/notifications") },
-    { icon: Settings, label: "App settings", note: "Appearance, security", onClick: () => router.push("/profile/settings") },
-    { icon: CircleHelp, label: "Help & support", note: "FAQs and contact", onClick: () => router.push("/profile/help") },
+    {
+      icon: Bell,
+      label: "Notifications",
+      note: "Evening memory prompt",
+      onClick: () => router.push("/profile/notifications"),
+    },
+    {
+      icon: Settings,
+      label: "App settings",
+      note: "Appearance, security",
+      onClick: () => router.push("/profile/settings"),
+    },
+    {
+      icon: CircleHelp,
+      label: "Help & support",
+      note: "FAQs and contact",
+      onClick: () => router.push("/profile/help"),
+    },
   ];
 
   return (
     <>
-      <Header screen="profile" onVoice={() => setVoiceOpen(true)} scrolled={false} />
+      <Header
+        screen="profile"
+        onVoice={() => setVoiceOpen(true)}
+        scrolled={false}
+      />
       <main className="flex flex-col gap-5 px-5 pb-28">
         <div className="profile-card">
           <Avatar size={11} name={displayName} />
