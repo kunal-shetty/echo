@@ -53,15 +53,10 @@ export default function RootLayout({
       <body className={`${geist.variable} ${geistMono.variable} antialiased`}>
         <AppContextProvider>
           <OnboardingWrapper>
-            <AppShell>
-              {children}
-            </AppShell>
+            <AppShell>{children}</AppShell>
           </OnboardingWrapper>
         </AppContextProvider>
       </body>
     </html>
   );
 }
-
-
-
