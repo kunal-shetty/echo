@@ -34,7 +34,11 @@ export function TransactionRow({
       className="flex items-center gap-3 py-3"
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1], delay: index * 0.04 }}
+      transition={{
+        duration: 0.32,
+        ease: [0.16, 1, 0.3, 1],
+        delay: index * 0.04,
+      }}
       whileTap={{ scale: 0.99, backgroundColor: "oklch(0.18 0.03 255 / 60%)" }}
       style={{ borderRadius: "0.9rem", padding: "0.6rem 0.5rem" }}
       onClick={interactive ? () => onClick!(item) : undefined}
@@ -52,7 +56,11 @@ export function TransactionRow({
       }
     >
       <div className={`merchant-icon ${toneClasses[item.tone]}`}>
-        {item.icon === "CircleDollarSign" ? <CircleDollarSign size={16} /> : item.icon}
+        {item.icon === "CircleDollarSign" ? (
+          <CircleDollarSign size={16} />
+        ) : (
+          item.icon
+        )}
       </div>
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1.5 truncate text-sm font-medium">
