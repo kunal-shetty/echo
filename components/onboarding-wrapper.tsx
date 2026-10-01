@@ -9,10 +9,7 @@ export function OnboardingWrapper({ children }: { children: React.ReactNode }) {
   const { onboarded, setOnboarded, user, setUser } = useApp();
   const tx = useTransactions();
 
-  const completeOnboarding = async (
-    expense: Transaction,
-    info: any,
-  ) => {
+  const completeOnboarding = async (expense: Transaction, info: any) => {
     setUser(info);
     try {
       window.localStorage.setItem("echo-onboarded-v1", "true");
