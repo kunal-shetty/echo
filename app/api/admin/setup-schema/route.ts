@@ -18,12 +18,12 @@ export async function POST() {
     );`,
 
     // 3. Add index for session lookup
-    `CREATE INDEX IF NOT EXISTS idx_sessions_id ON public.sessions(id);`
+    `CREATE INDEX IF NOT EXISTS idx_sessions_id ON public.sessions(id);`,
   ];
 
   try {
     for (const query of queries) {
-      const { error } = await supabase.rpc('exec_sql', { sql: query });
+      const { error } = await supabase.rpc("exec_sql", { sql: query });
       if (error) throw error;
     }
     return NextResponse.json({ success: true });
