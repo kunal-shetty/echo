@@ -6,10 +6,7 @@
 
 import { NextResponse } from "next/server.js";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
-import {
-  deleteCategory,
-  updateCategory,
-} from "@/lib/server/categories";
+import { deleteCategory, updateCategory } from "@/lib/server/categories";
 import { isIconName } from "@/lib/icon-vocab";
 import { getCurrentUserId } from "@/lib/server/user";
 
@@ -87,8 +84,14 @@ export async function PATCH(
     patch.tone = body.tone as Parameters<typeof updateCategory>[2]["tone"];
   }
   if (body.sort_order !== undefined) {
-    if (typeof body.sort_order !== "number" || !Number.isFinite(body.sort_order)) {
-      return NextResponse.json({ error: "Invalid sort_order" }, { status: 400 });
+    if (
+      typeof body.sort_order !== "number" ||
+      !Number.isFinite(body.sort_order)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid sort_order" },
+        { status: 400 },
+      );
     }
     patch.sort_order = Math.trunc(body.sort_order);
   }
