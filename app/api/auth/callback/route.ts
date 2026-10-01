@@ -15,14 +15,20 @@ export async function GET(req: Request) {
   const provider = searchParams.get("provider");
 
   if (!code || !state || provider !== "google") {
-    return NextResponse.json({ error: "Invalid request parameters" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid request parameters" },
+      { status: 400 },
+    );
   }
 
   // 1. Validate state
   const store = await cookies();
   const savedState = store.get("oauth_state")?.value;
   if (!savedState || savedState !== state) {
-    return NextResponse.json({ error: "Invalid state. Possible CSRF attack." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid state. Possible CSRF attack." },
+      { status: 400 },
+    );
   }
   store.delete("oauth_state");
 
@@ -42,7 +48,10 @@ export async function GET(req: Request) {
 
     const tokens = await tokenResponse.json();
     if (!tokenResponse.ok) {
-      return NextResponse.json({ error: tokens.error_description || "Token exchange failed" }, { status: 500 });
+      return NextResponse.json(
+        { error: tokens.error_description || "Token exchange failed" },
+        { status: 500 },
+      );
     }
 
     const idToken = tokens.id_token;
@@ -56,7 +65,10 @@ export async function GET(req: Request) {
     const oauthId = payload.sub;
 
     if (!email || !oauthId) {
-      return NextResponse.json({ error: "Invalid user info in token" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid user info in token" },
+        { status: 400 },
+      );
     }
 
     // 4. Resolve User in DB
@@ -91,13 +103,11 @@ export async function GET(req: Request) {
 
     // 5. Create Session
     const sessionId = randomUUID();
-    const { error: sessionError } = await supabase
-      .from("sessions")
-      .insert({
-        id: sessionId,
-        user_id: userId,
-        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      });
+    const { error: sessionError } = await supabase.from("sessions").insert({
+      id: sessionId,
+      user_id: userId,
+      expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    });
 
     if (sessionError) throw sessionError;
 
