@@ -20,7 +20,10 @@ export async function POST(req: Request) {
 
   const email = body.email?.trim().toLowerCase();
   if (!email || !email.includes("@")) {
-    return NextResponse.json({ error: "A valid email is required." }, { status: 400 });
+    return NextResponse.json(
+      { error: "A valid email is required." },
+      { status: 400 },
+    );
   }
 
   try {
