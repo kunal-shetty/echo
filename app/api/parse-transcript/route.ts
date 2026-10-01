@@ -8,10 +8,7 @@ export async function POST(req: Request) {
   try {
     body = (await req.json()) as { transcript?: string };
   } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON body" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   const transcript = body.transcript?.trim();
