@@ -18,7 +18,12 @@ interface Action {
   onPick: () => void;
 }
 
-export function Fab({ visible = true, onPickSingle, onPickBulk, onPickCategory }: FabProps) {
+export function Fab({
+  visible = true,
+  onPickSingle,
+  onPickBulk,
+  onPickCategory,
+}: FabProps) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -31,9 +36,24 @@ export function Fab({ visible = true, onPickSingle, onPickBulk, onPickCategory }
   }, [open]);
 
   const actions: Action[] = [
-    { key: "single", label: "Single memory", Icon: PencilLine, onPick: onPickSingle },
-    { key: "bulk", label: "Bulk add", Icon: FileSpreadsheet, onPick: onPickBulk },
-    { key: "category", label: "New category", Icon: Tag, onPick: onPickCategory },
+    {
+      key: "single",
+      label: "Single memory",
+      Icon: PencilLine,
+      onPick: onPickSingle,
+    },
+    {
+      key: "bulk",
+      label: "Bulk add",
+      Icon: FileSpreadsheet,
+      onPick: onPickBulk,
+    },
+    {
+      key: "category",
+      label: "New category",
+      Icon: Tag,
+      onPick: onPickCategory,
+    },
   ];
 
   const handlePick = (a: Action) => () => {
