@@ -35,13 +35,7 @@ function initialsFromName(name: string): string {
 /**
  * Renders a small circular avatar containing initials derived from the user's name.
  */
-export function Avatar({
-  size = 9,
-  name,
-}: {
-  size?: number;
-  name?: string;
-}) {
+export function Avatar({ size = 9, name }: { size?: number; name?: string }) {
   return (
     <div
       className="grid place-items-center rounded-full bg-surface-3 text-xs font-semibold text-foreground ring-1 ring-border"
