@@ -6,10 +6,7 @@
 
 import { NextResponse } from "next/server.js";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
-import {
-  createCategory,
-  listCategoriesForUser,
-} from "@/lib/server/categories";
+import { createCategory, listCategoriesForUser } from "@/lib/server/categories";
 import { isIconName } from "@/lib/icon-vocab";
 import { getCurrentUserId } from "@/lib/server/user";
 
@@ -89,10 +86,7 @@ export async function POST(req: Request) {
   if (body.icon === undefined || body.icon === null || body.icon === "") {
     icon = null;
   } else if (typeof body.icon !== "string" || !isIconName(body.icon)) {
-    return NextResponse.json(
-      { error: "Unknown icon" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Unknown icon" }, { status: 400 });
   } else {
     icon = body.icon;
   }
