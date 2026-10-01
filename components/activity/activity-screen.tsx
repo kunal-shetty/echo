@@ -31,7 +31,8 @@ export function ActivityScreen() {
   const filtered = useMemo(
     () =>
       expenses.filter((item) => {
-        const haystack = `${item.merchantRaw} ${item.categoryName ?? ""}`.toLowerCase();
+        const haystack =
+          `${item.merchantRaw} ${item.categoryName ?? ""}`.toLowerCase();
         const matchesQuery = haystack.includes(query.toLowerCase());
         const catLabel = item.categoryName ?? "";
         const matchesFilter =
@@ -46,7 +47,11 @@ export function ActivityScreen() {
 
   return (
     <>
-      <Header screen="activity" onVoice={() => setVoiceOpen(true)} scrolled={false} />
+      <Header
+        screen="activity"
+        onVoice={() => setVoiceOpen(true)}
+        scrolled={false}
+      />
       <main className="flex flex-col gap-5 px-5 pb-28">
         {empty ? (
           <EmptyActivity
