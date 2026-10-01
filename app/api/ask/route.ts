@@ -48,10 +48,7 @@ export async function POST(req: Request) {
   try {
     body = (await req.json()) as AskBody;
   } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON body" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   const apiKey = process.env.GROQ_API_KEY;
@@ -68,7 +65,10 @@ export async function POST(req: Request) {
   if (body.respondOnly) {
     const transcript = body.transcript?.trim();
     if (!transcript || !body.result) {
-      return NextResponse.json({ error: "Missing transcript or result" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing transcript or result" },
+        { status: 400 },
+      );
     }
     try {
       const reasonedSpoken = await generateReasonedResponse(
@@ -79,7 +79,10 @@ export async function POST(req: Request) {
       );
       return NextResponse.json({ spoken: reasonedSpoken });
     } catch (e) {
-      return NextResponse.json({ error: "Response generation failed" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Response generation failed" },
+        { status: 500 },
+      );
     }
   }
 
@@ -127,8 +130,7 @@ export async function POST(req: Request) {
     categoryName: parsed.queryCategory,
     merchant: parsed.queryMerchant,
     limit: parsed.queryLimit,
-    direction:
-      parsed.queryDirection ?? defaultDirectionForQuery(transcript),
+    direction: parsed.queryDirection ?? defaultDirectionForQuery(transcript),
     nlqSpec: parsed.nlqSpec,
   };
 
