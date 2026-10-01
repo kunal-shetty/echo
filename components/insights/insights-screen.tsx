@@ -51,7 +51,11 @@ export function InsightsScreen() {
 
   return (
     <>
-      <Header screen="insights" onVoice={() => setVoiceOpen(true)} scrolled={false} />
+      <Header
+        screen="insights"
+        onVoice={() => setVoiceOpen(true)}
+        scrolled={false}
+      />
       <main className="flex flex-col gap-5 px-5 pb-28 echo-stagger">
         <div className="insight-hero">
           <div className="flex items-center gap-2 text-emerald">
@@ -67,7 +71,10 @@ export function InsightsScreen() {
         </div>
 
         {empty ? (
-          <EmptyInsights onVoice={() => setVoiceOpen(true)} configured={configured} />
+          <EmptyInsights
+            onVoice={() => setVoiceOpen(true)}
+            configured={configured}
+          />
         ) : (
           <>
             <WrappedStory insights={insights} />
@@ -133,7 +140,13 @@ export function InsightsScreen() {
                     margin={{ left: -20, right: 0, top: 8, bottom: 0 }}
                   >
                     <defs>
-                      <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient
+                        id="trendFill"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
                         <stop
                           offset="0%"
                           stopColor="var(--chart-1)"
@@ -161,7 +174,10 @@ export function InsightsScreen() {
                         borderRadius: 12,
                         color: "var(--foreground)",
                       }}
-                      formatter={(value) => [moneyShort(Number(value ?? 0)), "Spend"]}
+                      formatter={(value) => [
+                        moneyShort(Number(value ?? 0)),
+                        "Spend",
+                      ]}
                     />
                     <Area
                       type="monotone"
@@ -267,10 +283,7 @@ function buildSeries(expenses: Transaction[]): {
       tx.categoryId?.replace(/^cat-/, "") ?? tx.merchantRaw ?? "Other";
     byCategory.set(key, (byCategory.get(key) ?? 0) + tx.amountMinor);
   }
-  const totalSpend = Array.from(byCategory.values()).reduce(
-    (a, b) => a + b,
-    0,
-  );
+  const totalSpend = Array.from(byCategory.values()).reduce((a, b) => a + b, 0);
   const categoryData = Array.from(byCategory.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
@@ -301,7 +314,5 @@ function buildSeries(expenses: Transaction[]): {
 }
 
 function prettyCategory(slug: string): string {
-  return slug
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
