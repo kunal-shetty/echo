@@ -8,13 +8,7 @@
 
 import { motion } from "motion/react";
 import { useRef, useState } from "react";
-import {
-  Home,
-  Lightbulb,
-  ListFilter,
-  Mic,
-  UserRound,
-} from "lucide-react";
+import { Home, Lightbulb, ListFilter, Mic, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_PILL } from "@/lib/motion";
@@ -30,11 +24,7 @@ const ITEMS = [
  * The primary bottom navigation bar.
  * Uses Next.js routing for screen switching with an animated active pill.
  */
-export function BottomNav({
-  onVoice,
-}: {
-  onVoice: () => void;
-}) {
+export function BottomNav({ onVoice }: { onVoice: () => void }) {
   const pathname = usePathname();
 
   return (
