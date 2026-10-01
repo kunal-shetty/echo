@@ -12,9 +12,7 @@ import {
   bulkCreateTransactions,
   type BulkTransactionInsert,
 } from "@/lib/server/transactions";
-import {
-  listCategoriesForUser,
-} from "@/lib/server/categories";
+import { listCategoriesForUser } from "@/lib/server/categories";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
 import { getCurrentUserId, getUserRow } from "@/lib/server/user";
 import type { Transaction } from "@/lib/schema";
@@ -50,7 +48,19 @@ interface RowFailure {
 
 interface ValidatedRow {
   rowIndex: number;
-  parsed: Omit<BulkTransactionInsert, "account_id" | "currency" | "category_id" | "merchant_canonical" | "note" | "confidence" | "raw_transcript" | "clarified" | "source" | "direction"> & {
+  parsed: Omit<
+    BulkTransactionInsert,
+    | "account_id"
+    | "currency"
+    | "category_id"
+    | "merchant_canonical"
+    | "note"
+    | "confidence"
+    | "raw_transcript"
+    | "clarified"
+    | "source"
+    | "direction"
+  > & {
     account_id: string;
     currency: string;
     category_id: string | null;
@@ -113,7 +123,7 @@ export async function POST(req: Request) {
   }
   if (rows.length > MAX_ROWS) {
     return NextResponse.json(
-      { error: `Too many rows (max ${MAX_ROWS})` },  // fix 1
+      { error: `Too many rows (max ${MAX_ROWS})` }, // fix 1
       { status: 400 },
     );
   }
@@ -161,8 +171,7 @@ export async function POST(req: Request) {
       failures.push({ rowIndex: idx, error: "Merchant is required" });
       return;
     }
-    const amount =
-      typeof r.amount_minor === "number" ? r.amount_minor : NaN;
+    const amount = typeof r.amount_minor === "number" ? r.amount_minor : NaN;
     if (!(amount > 0)) {
       failures.push({ rowIndex: idx, error: "Amount must be > 0" });
       return;
@@ -172,12 +181,17 @@ export async function POST(req: Request) {
     let categoryId: string | null = null;
     if (r.category_id && knownCategoryIds!.has(r.category_id)) {
       categoryId = r.category_id;
-    } else if (r.category_name && categoryNameByLower!.has(r.category_name.trim().toLowerCase())) {
-      categoryId = categoryNameByLower!.get(r.category_name.trim().toLowerCase())!;
+    } else if (
+      r.category_name &&
+      categoryNameByLower!.has(r.category_name.trim().toLowerCase())
+    ) {
+      categoryId = categoryNameByLower!.get(
+        r.category_name.trim().toLowerCase(),
+      )!;
     } else if (r.category_id) {
       failures.push({
         rowIndex: idx,
-        error: `Unknown category id '${r.category_id}'`,  // fix 2
+        error: `Unknown category id '${r.category_id}'`, // fix 2
       });
       return;
     }
@@ -193,7 +207,9 @@ export async function POST(req: Request) {
         : "expense";
 
     const note =
-      r.note === undefined || r.note === null ? null : String(r.note).slice(0, 500);
+      r.note === undefined || r.note === null
+        ? null
+        : String(r.note).slice(0, 500);
 
     validated.push({
       rowIndex: idx,
@@ -226,9 +242,7 @@ export async function POST(req: Request) {
       const rowsToInsert = validated.map((v) => v.parsed);
       const dbRows = await bulkCreateTransactions(userId, rowsToInsert);
       const cats = await listCategoriesForUser(userId);
-      inserted = dbRows.map((r) =>
-        toUiTransaction(r, indexCategories(cats)),
-      );
+      inserted = dbRows.map((r) => toUiTransaction(r, indexCategories(cats)));
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
       return NextResponse.json({ error: message }, { status: 500 });
