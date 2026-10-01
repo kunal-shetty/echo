@@ -2,7 +2,15 @@
 
 import { useEffect, useState, forwardRef, useImperativeHandle } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, Mic, Plus, Tag as TagIcon, Type, Volume2, CircleDollarSign } from "lucide-react";
+import {
+  Check,
+  Mic,
+  Plus,
+  Tag as TagIcon,
+  Type,
+  Volume2,
+  CircleDollarSign,
+} from "lucide-react";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Field } from "@/components/ui/field";
 import { AmountStepper } from "@/components/ui/amount-stepper";
@@ -33,111 +41,193 @@ interface VoiceSheetProps {
   onDeleted?: (id: string) => void;
 }
 
-export const VoiceSheet = forwardRef(({
-  open,
-  onClose,
-  onSave,
-  onUpdated,
-  onDeleted,
-}, ref: any) => {
-  const [sessionId] = useState(() => Math.random().toString(36).substring(7));
-  const { categories: rawCats } = useCategories();
-  const categories = rawCats.map(toUiCategory);
-  const { transactions, provider } = useTransactions();
-  const [mode, setMode] = useState<CaptureMode>("listening");
-  const [confirmedAmount, setConfirmedAmount] = useState(150);
-  const [amount, setAmount] = useState(0);
-  const [merchant, setMerchant] = useState("");
-  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
-  const [direction, setDirection] = useState<"expense" | "income">("expense");
-  const [transcript, setTranscript] = useState("");
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [answer, setAnswer] = useState<AnswerState | null>(null);
-  const synth = useSpeechSynth();
+export const VoiceSheet = forwardRef(
+  ({ open, onClose, onSave, onUpdated, onDeleted }, ref: any) => {
+    const [sessionId] = useState(() => Math.random().toString(36).substring(7));
+    const { categories: rawCats } = useCategories();
+    const categories = rawCats.map(toUiCategory);
+    const { transactions, provider } = useTransactions();
+    const [mode, setMode] = useState<CaptureMode>("listening");
+    const [confirmedAmount, setConfirmedAmount] = useState(150);
+    const [amount, setAmount] = useState(0);
+    const [merchant, setMerchant] = useState("");
+    const [categoryId, setCategoryId] = useState(categories[0]?.id ?? "");
+    const [direction, setDirection] = useState<"expense" | "income">("expense");
+    const [transcript, setTranscript] = useState("");
+    const [parseError, setParseError] = useState<string | null>(null);
+    const [answer, setAnswer] = useState<AnswerState | null>(null);
+    const synth = useSpeechSynth();
 
-  const speech = useSpeech({
-    onFinal: async (text) => {
-      setTranscript(text);
-      if (!text) return;
-      setMode("parsing");
-      try {
-        const lowered = text.toLowerCase();
-        const looksLikeQuestion =
-          /^(how much|what (did|was|have)|show me|total|sum|biggest|largest|most|list)/i.test(
-            lowered,
-          );
-        if (looksLikeQuestion) {
-          // Determine if we should query local or API storage
-          const isLocal = provider instanceof (await import("@/lib/storage-providers").then(m => m.LocalStorageProvider));
+    const speech = useSpeech({
+      onFinal: async (text) => {
+        setTranscript(text);
+        if (!text) return;
+        setMode("parsing");
+        try {
+          const lowered = text.toLowerCase();
+          const looksLikeQuestion =
+            /^(how much|what (did|was|have)|show me|total|sum|biggest|largest|most|list)/i.test(
+              lowered,
+            );
+          if (looksLikeQuestion) {
+            // Determine if we should query local or API storage
+            const isLocal =
+              provider instanceof
+              (await import("@/lib/storage-providers").then(
+                (m) => m.LocalStorageProvider,
+              ));
 
-          if (isLocal) {
-            // Hybrid Flow for Local Storage:
-            // 1. Parse the intent on the server
-            const parseRes = await fetch("/api/ask", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ transcript: text, parseOnly: true }),
-            });
-            const parseData = await parseRes.json() as { result: ParseResult };
-            const parsed = parseData.result;
-
-            // 2. Execute the query locally
-            let resultData: { total: number | null; rows: Transaction[] };
-            if (parsed.nlqSpec) {
-              resultData = executeNlqSpec(transactions, parsed.nlqSpec);
-            } else {
-              // Fallback to basic filtering if no nlqSpec
-              const filtered = transactions.filter(t => {
-                if (parsed.queryCategory) {
-                  if (!t.categoryName?.toLowerCase().includes(parsed.queryCategory!.toLowerCase())) return false;
-                }
-                if (parsed.queryMerchant) {
-                  if (!t.merchantRaw.toLowerCase().includes(parsed.queryMerchant!.toLowerCase())) return false;
-                }
-                if (parsed.queryDirection && t.direction !== parsed.queryDirection) return false;
-                return true;
+            if (isLocal) {
+              // Hybrid Flow for Local Storage:
+              // 1. Parse the intent on the server
+              const parseRes = await fetch("/api/ask", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ transcript: text, parseOnly: true }),
               });
-              const total = filtered.reduce((acc, t) => acc + Number(t.amountMinor), 0);
-              resultData = { total, rows: filtered };
+              const parseData = (await parseRes.json()) as {
+                result: ParseResult;
+              };
+              const parsed = parseData.result;
+
+              // 2. Execute the query locally
+              let resultData: { total: number | null; rows: Transaction[] };
+              if (parsed.nlqSpec) {
+                resultData = executeNlqSpec(transactions, parsed.nlqSpec);
+              } else {
+                // Fallback to basic filtering if no nlqSpec
+                const filtered = transactions.filter((t) => {
+                  if (parsed.queryCategory) {
+                    if (
+                      !t.categoryName
+                        ?.toLowerCase()
+                        .includes(parsed.queryCategory!.toLowerCase())
+                    )
+                      return false;
+                  }
+                  if (parsed.queryMerchant) {
+                    if (
+                      !t.merchantRaw
+                        .toLowerCase()
+                        .includes(parsed.queryMerchant!.toLowerCase())
+                    )
+                      return false;
+                  }
+                  if (
+                    parsed.queryDirection &&
+                    t.direction !== parsed.queryDirection
+                  )
+                    return false;
+                  return true;
+                });
+                const total = filtered.reduce(
+                  (acc, t) => acc + Number(t.amountMinor),
+                  0,
+                );
+                resultData = { total, rows: filtered };
+              }
+
+              // 3. Generate conversational response on the server
+              const respondRes = await fetch("/api/ask", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  transcript: text,
+                  respondOnly: true,
+                  result: {
+                    total: resultData.total,
+                    rows: resultData.rows,
+                    kind: parsed.queryKind ?? "sum",
+                    range: parsed.queryRange ?? "all",
+                    headline: "", // Server will generate this
+                    spoken: "",
+                  },
+                }),
+              });
+              const respondData = (await respondRes.json()) as {
+                spoken: string;
+              };
+
+              setAnswer({
+                headline: `Local Result: ${resultData.total ? money(resultData.total) : "No data"}`,
+                spoken: respondData.spoken,
+                rows: resultData.rows,
+                kind: parsed.queryKind ?? "sum",
+              });
+              setMode("answer");
+              if (respondData.spoken) synth.speak(respondData.spoken);
+              return;
+            } else {
+              // Standard Flow for API Storage
+              const askRes = await fetch("/api/ask", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ transcript: text, sessionId }),
+              });
+              const askData = (await askRes.json().catch(() => ({}))) as {
+                result?: ParseResult;
+                query?: {
+                  headline: string;
+                  spoken: string;
+                  rows: Transaction[];
+                  kind: "sum" | "list" | "biggest";
+                };
+                error?: string;
+                warning?: string;
+              };
+              if (!askRes.ok || askData.error) {
+                throw new Error(askData.error ?? `HTTP ${askRes.status}`);
+              }
+              if (!askData.query) {
+                throw new Error("Empty response from /api/ask");
+              }
+              setAnswer({
+                headline: askData.query.headline,
+                spoken: askData.query.spoken,
+                rows: askData.query.rows ?? [],
+                kind: askData.query.kind,
+              });
+              setMode("answer");
+              if (askData.query.spoken) synth.speak(askData.query.spoken);
+              return;
             }
+          }
 
-            // 3. Generate conversational response on the server
-            const respondRes = await fetch("/api/ask", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                transcript: text,
-                respondOnly: true,
-                result: {
-                  total: resultData.total,
-                  rows: resultData.rows,
-                  kind: parsed.queryKind ?? "sum",
-                  range: parsed.queryRange ?? "all",
-                  headline: "", // Server will generate this
-                  spoken: ""
-                }
-              }),
-            });
-            const respondData = await respondRes.json() as { spoken: string };
+          const res = await fetch("/api/voice-intent", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcript: text }),
+          });
+          const data = (await res.json().catch(() => ({}))) as {
+            result?: ParseResult;
+            draft?: {
+              amount: number;
+              merchant: string;
+              categoryId: string | null;
+              direction: "expense" | "income";
+              transactedAt: string;
+              confidence: number;
+            };
+            transaction?: Transaction;
+            deletedId?: string;
+            warning?: string;
+            error?: string;
+          };
+          if (!res.ok || data.error) {
+            throw new Error(data.error ?? `HTTP ${res.status}`);
+          }
+          const result = data.result;
+          if (!result) {
+            throw new Error("Empty response from voice intent");
+          }
 
-            setAnswer({
-              headline: `Local Result: ${resultData.total ? money(resultData.total) : "No data"}`,
-              spoken: respondData.spoken,
-              rows: resultData.rows,
-              kind: parsed.queryKind ?? "sum",
-            });
-            setMode("answer");
-            if (respondData.spoken) synth.speak(respondData.spoken);
-            return;
-          } else {
-            // Standard Flow for API Storage
+          if (result.action === "query") {
             const askRes = await fetch("/api/ask", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ transcript: text, sessionId }),
             });
             const askData = (await askRes.json().catch(() => ({}))) as {
-              result?: ParseResult;
               query?: {
                 headline: string;
                 spoken: string;
@@ -145,7 +235,6 @@ export const VoiceSheet = forwardRef(({
                 kind: "sum" | "list" | "biggest";
               };
               error?: string;
-              warning?: string;
             };
             if (!askRes.ok || askData.error) {
               throw new Error(askData.error ?? `HTTP ${askRes.status}`);
@@ -163,335 +252,281 @@ export const VoiceSheet = forwardRef(({
             if (askData.query.spoken) synth.speak(askData.query.spoken);
             return;
           }
-        }
 
-        const res = await fetch("/api/voice-intent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transcript: text }),
-        });
-        const data = (await res.json().catch(() => ({}))) as {
-          result?: ParseResult;
-          draft?: {
-            amount: number;
-            merchant: string;
-            categoryId: string | null;
-            direction: "expense" | "income";
-            transactedAt: string;
-            confidence: number;
-          };
-          transaction?: Transaction;
-          deletedId?: string;
-          warning?: string;
-          error?: string;
-        };
-        if (!res.ok || data.error) {
-          throw new Error(data.error ?? `HTTP ${res.status}`);
-        }
-        const result = data.result;
-        if (!result) {
-          throw new Error("Empty response from voice intent");
-        }
-
-        if (result.action === "query") {
-          const askRes = await fetch("/api/ask", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ transcript: text, sessionId }),
-          });
-          const askData = (await askRes.json().catch(() => ({}))) as {
-            query?: {
-              headline: string;
-              spoken: string;
-              rows: Transaction[];
-              kind: "sum" | "list" | "biggest";
-            };
-            error?: string;
-          };
-          if (!askRes.ok || askData.error) {
-            throw new Error(askData.error ?? `HTTP ${askRes.status}`);
+          if (result.action === "update" && data.transaction) {
+            speech.stop();
+            onUpdated?.(data.transaction);
+            onClose();
+            return;
           }
-          if (!askData.query) {
-            throw new Error("Empty response from /api/ask");
+          if (result.action === "delete" && data.deletedId) {
+            speech.stop();
+            onDeleted?.(data.deletedId);
+            onClose();
+            return;
           }
-          setAnswer({
-            headline: askData.query.headline,
-            spoken: askData.query.spoken,
-            rows: askData.query.rows ?? [],
-            kind: askData.query.kind,
-          });
-          setMode("answer");
-          if (askData.query.spoken) synth.speak(askData.query.spoken);
-          return;
-        }
-
-        if (result.action === "update" && data.transaction) {
-          speech.stop();
-          onUpdated?.(data.transaction);
-          onClose();
-          return;
-        }
-        if (result.action === "delete" && data.deletedId) {
-          speech.stop();
-          onDeleted?.(data.deletedId);
-          onClose();
-          return;
-        }
-        if (
-          (result.action === "update" || result.action === "delete") &&
-          data.warning
-        ) {
-          setParseError(data.warning);
-          setMode("manual");
-          return;
-        }
-
-        const draft = data.draft;
-        if (draft) {
-          setConfirmedAmount(draft.amount);
-          setAmount(draft.amount);
-          setMerchant(draft.merchant);
-          if (draft.categoryId) setCategoryId(draft.categoryId);
-          if (draft.direction) setDirection(draft.direction);
-        } else {
-          if (typeof result.amount === "number" && result.amount > 0) {
-            setConfirmedAmount(result.amount);
-            setAmount(result.amount);
+          if (
+            (result.action === "update" || result.action === "delete") &&
+            data.warning
+          ) {
+            setParseError(data.warning);
+            setMode("manual");
+            return;
           }
-          if (result.merchant) setMerchant(result.merchant);
-          if (result.category) {
-            const cat = categories.find(
-              (c) => c.name.toLowerCase() === result.category!.toLowerCase(),
+
+          const draft = data.draft;
+          if (draft) {
+            setConfirmedAmount(draft.amount);
+            setAmount(draft.amount);
+            setMerchant(draft.merchant);
+            if (draft.categoryId) setCategoryId(draft.categoryId);
+            if (draft.direction) setDirection(draft.direction);
+          } else {
+            if (typeof result.amount === "number" && result.amount > 0) {
+              setConfirmedAmount(result.amount);
+              setAmount(result.amount);
+            }
+            if (result.merchant) setMerchant(result.merchant);
+            if (result.category) {
+              const cat = categories.find(
+                (c) => c.name.toLowerCase() === result.category!.toLowerCase(),
+              );
+              if (cat) setCategoryId(cat.id);
+            }
+          }
+
+          if (
+            result.confidence < 0.3 ||
+            result.amount == null ||
+            !result.merchant
+          ) {
+            setParseError(
+              data.warning ??
+                "Couldn't parse that confidently. Please confirm below.",
             );
-            if (cat) setCategoryId(cat.id);
+            setMode("manual");
+          } else if (result.confidence >= 0.7) {
+            speech.stop();
+            if (data.transaction) {
+              onSave(data.transaction);
+            } else if (data.draft) {
+              saveFromDraft(data.draft);
+            }
+            onClose();
+          } else {
+            setMode("confirm");
           }
-        }
-
-        if (
-          result.confidence < 0.3 ||
-          result.amount == null ||
-          !result.merchant
-        ) {
-          setParseError(
-            data.warning ??
-              "Couldn't parse that confidently. Please confirm below.",
-          );
+        } catch (e) {
+          setParseError(e instanceof Error ? e.message : "Parse failed");
           setMode("manual");
-        } else if (result.confidence >= 0.7) {
-          speech.stop();
-          if (data.transaction) {
-            onSave(data.transaction);
-          } else if (data.draft) {
-            saveFromDraft(data.draft);
-          }
-          onClose();
-        } else {
-          setMode("confirm");
         }
-      } catch (e) {
-        setParseError(e instanceof Error ? e.message : "Parse failed");
-        setMode("manual");
-      }
-    },
-  });
+      },
+    });
 
-  useImperativeHandle(ref, () => ({
-    start: () => {
-      speech.reset();
-      speech.start();
-      setMode("listening");
-    },
-    stop: () => {
-      speech.stop();
-    },
-  }));
-
-  // Reset state when the sheet opens
-  useEffect(() => {
-    if (!open) return;
-    setMode("listening");
-    setMerchant("");
-    setAmount(0);
-    setConfirmedAmount(150);
-    setDirection("expense");
-    setTranscript("");
-    setParseError(null);
-    setAnswer(null);
-    synth.cancel();
-    speech.reset();
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Stop any TTS when the sheet closes so it doesn't keep playing in the bg.
-  useEffect(() => {
-    if (open) return;
-    synth.cancel();
-  }, [open, synth]);
-
-  const category =
-    categories.find((c) => c.id === categoryId) ?? categories[0];
-
-  const saveFromDraft = (draft: {
-    amount: number;
-    merchant: string;
-    categoryId: string | null;
-    direction: "expense" | "income";
-    transactedAt: string;
-    rawTranscript: string;
-    confidence: number;
-  }) => {
-    const cat = categories.find((c) => c.id === draft.categoryId);
-    const expense: Transaction = {
-      id: `local-${Date.now()}`,
-      userId: "user-1",
-      accountId: "acc-default",
-      categoryId: draft.categoryId,
-      amountMinor: draft.amount,
-      currency: "INR",
-      direction: draft.direction,
-      merchantRaw: draft.merchant,
-      merchantCanonical: draft.merchant,
-      transactedAt: draft.transactedAt,
-      createdAt: new Date().toISOString(),
-      source: "voice",
-      confidence: draft.confidence,
-      rawTranscript: draft.rawTranscript,
-      clarified: false,
-      icon: draft.merchant.charAt(0).toUpperCase(),
-      tone: cat?.tone ?? "neutral",
-      date: "Today, just now",
-      categoryName: cat?.name ?? null,
-    };
-    speech.stop();
-    onSave(expense);
-  };
-
-  const save = (
-
-    amountValue: number,
-    merchantValue: string,
-    confidenceOverride?: number | null,
-  ) => {
-    const cat = category;
-    const isManual = mode === "manual";
-    const fallbackName = direction === "income" ? "Income" : "Expense";
-    const expense: Transaction = {
-      id: `local-${Date.now()}`,
-      userId: "user-1",
-      accountId: "acc-default",
-      categoryId: cat?.id ?? null,
-      amountMinor: amountValue,
-      currency: "INR",
-      direction,
-      merchantRaw: merchantValue || fallbackName,
-      merchantCanonical: merchantValue || fallbackName,
-      transactedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      source: isManual ? "manual" : "voice",
-      confidence: isManual ? null : confidenceOverride ?? 0.88,
-      rawTranscript: isManual
-        ? null
-        : transcript || `spent ${amountValue} on ${merchantValue}`,
-      clarified: false,
-      icon: (merchantValue || fallbackName).charAt(0).toUpperCase(),
-      tone: cat?.tone ?? "neutral",
-      date: "Today, just now",
-      categoryName: cat?.name ?? null,
-    };
-    speech.stop();
-    onSave(expense);
-  };
-
-  return (
-    <BottomSheet
-      open={open}
-      onClose={() => {
+    useImperativeHandle(ref, () => ({
+      start: () => {
+        speech.reset();
+        speech.start();
+        setMode("listening");
+      },
+      stop: () => {
         speech.stop();
-        onClose();
-      }}
-      title={
-        mode === "manual"
-          ? "Add a memory"
-          : mode === "confirm"
-            ? "Did I get this right?"
-            : mode === "parsing"
-              ? "Thinking…"
-              : mode === "answer"
-                ? "Here's what I found"
-                : undefined
-      }
-      subtitle={
-        mode === "manual" || mode === "parsing" || mode === "answer"
-          ? undefined
-          : "Quick capture"
-      }
-    >
-      <AnimatePresence mode="wait">
-        {mode === "listening" ? (
-          <ListeningState
-            key="listening"
-            transcript={speech.transcript}
-            supported={speech.supported}
-            listening={speech.listening}
-            error={speech.error}
-            onSkip={() => {
-              speech.stop();
-              setMode("manual");
-            }}
-            onRetry={() => {
-              speech.reset();
-              speech.start();
-              setMode("listening");
-            }}
-          />
-        ) : mode === "parsing" ? (
-          <ParsingState key="parsing" transcript={transcript} />
-        ) : mode === "answer" ? (
-          <AnswerState
-            key="answer"
-            answer={answer}
-            speaking={synth.speaking}
-            supported={synth.supported}
-            onReplay={() => answer && synth.speak(answer.spoken)}
-            onAskAgain={() => {
-              setAnswer(null);
-              setMode("listening");
-              speech.reset();
-              speech.start();
-            }}
-            onClose={onClose}
-          />
-        ) : mode === "confirm" ? (
-          <ConfirmState
-            key="confirm"
-            amount={confirmedAmount}
-            merchant={merchant || (direction === "income" ? "Income" : "Lunch")}
-            direction={direction}
-            setDirection={setDirection}
-            onPick={setConfirmedAmount}
-            onSave={() => save(confirmedAmount, merchant || (direction === "income" ? "Income" : "Lunch"))}
-            onSwitchToManual={() => setMode("manual")}
-          />
-        ) : (
-          <ManualState
-            key="manual"
-            amount={amount}
-            setAmount={setAmount}
-            merchant={merchant}
-            setMerchant={setMerchant}
-            categoryId={categoryId}
-            setCategoryId={setCategoryId}
-            direction={direction}
-            setDirection={setDirection}
-            categories={categories}
-            categoryName={category?.name ?? "your account"}
-            parseError={parseError}
-            onSave={() => save(amount, merchant)}
-          />
-        )}
-      </AnimatePresence>
-    </BottomSheet>
-  );
-});
+      },
+    }));
+
+    // Reset state when the sheet opens
+    useEffect(() => {
+      if (!open) return;
+      setMode("listening");
+      setMerchant("");
+      setAmount(0);
+      setConfirmedAmount(150);
+      setDirection("expense");
+      setTranscript("");
+      setParseError(null);
+      setAnswer(null);
+      synth.cancel();
+      speech.reset();
+    }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Stop any TTS when the sheet closes so it doesn't keep playing in the bg.
+    useEffect(() => {
+      if (open) return;
+      synth.cancel();
+    }, [open, synth]);
+
+    const category =
+      categories.find((c) => c.id === categoryId) ?? categories[0];
+
+    const saveFromDraft = (draft: {
+      amount: number;
+      merchant: string;
+      categoryId: string | null;
+      direction: "expense" | "income";
+      transactedAt: string;
+      rawTranscript: string;
+      confidence: number;
+    }) => {
+      const cat = categories.find((c) => c.id === draft.categoryId);
+      const expense: Transaction = {
+        id: `local-${Date.now()}`,
+        userId: "user-1",
+        accountId: "acc-default",
+        categoryId: draft.categoryId,
+        amountMinor: draft.amount,
+        currency: "INR",
+        direction: draft.direction,
+        merchantRaw: draft.merchant,
+        merchantCanonical: draft.merchant,
+        transactedAt: draft.transactedAt,
+        createdAt: new Date().toISOString(),
+        source: "voice",
+        confidence: draft.confidence,
+        rawTranscript: draft.rawTranscript,
+        clarified: false,
+        icon: draft.merchant.charAt(0).toUpperCase(),
+        tone: cat?.tone ?? "neutral",
+        date: "Today, just now",
+        categoryName: cat?.name ?? null,
+      };
+      speech.stop();
+      onSave(expense);
+    };
+
+    const save = (
+      amountValue: number,
+      merchantValue: string,
+      confidenceOverride?: number | null,
+    ) => {
+      const cat = category;
+      const isManual = mode === "manual";
+      const fallbackName = direction === "income" ? "Income" : "Expense";
+      const expense: Transaction = {
+        id: `local-${Date.now()}`,
+        userId: "user-1",
+        accountId: "acc-default",
+        categoryId: cat?.id ?? null,
+        amountMinor: amountValue,
+        currency: "INR",
+        direction,
+        merchantRaw: merchantValue || fallbackName,
+        merchantCanonical: merchantValue || fallbackName,
+        transactedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        source: isManual ? "manual" : "voice",
+        confidence: isManual ? null : (confidenceOverride ?? 0.88),
+        rawTranscript: isManual
+          ? null
+          : transcript || `spent ${amountValue} on ${merchantValue}`,
+        clarified: false,
+        icon: (merchantValue || fallbackName).charAt(0).toUpperCase(),
+        tone: cat?.tone ?? "neutral",
+        date: "Today, just now",
+        categoryName: cat?.name ?? null,
+      };
+      speech.stop();
+      onSave(expense);
+    };
+
+    return (
+      <BottomSheet
+        open={open}
+        onClose={() => {
+          speech.stop();
+          onClose();
+        }}
+        title={
+          mode === "manual"
+            ? "Add a memory"
+            : mode === "confirm"
+              ? "Did I get this right?"
+              : mode === "parsing"
+                ? "Thinking…"
+                : mode === "answer"
+                  ? "Here's what I found"
+                  : undefined
+        }
+        subtitle={
+          mode === "manual" || mode === "parsing" || mode === "answer"
+            ? undefined
+            : "Quick capture"
+        }
+      >
+        <AnimatePresence mode="wait">
+          {mode === "listening" ? (
+            <ListeningState
+              key="listening"
+              transcript={speech.transcript}
+              supported={speech.supported}
+              listening={speech.listening}
+              error={speech.error}
+              onSkip={() => {
+                speech.stop();
+                setMode("manual");
+              }}
+              onRetry={() => {
+                speech.reset();
+                speech.start();
+                setMode("listening");
+              }}
+            />
+          ) : mode === "parsing" ? (
+            <ParsingState key="parsing" transcript={transcript} />
+          ) : mode === "answer" ? (
+            <AnswerState
+              key="answer"
+              answer={answer}
+              speaking={synth.speaking}
+              supported={synth.supported}
+              onReplay={() => answer && synth.speak(answer.spoken)}
+              onAskAgain={() => {
+                setAnswer(null);
+                setMode("listening");
+                speech.reset();
+                speech.start();
+              }}
+              onClose={onClose}
+            />
+          ) : mode === "confirm" ? (
+            <ConfirmState
+              key="confirm"
+              amount={confirmedAmount}
+              merchant={
+                merchant || (direction === "income" ? "Income" : "Lunch")
+              }
+              direction={direction}
+              setDirection={setDirection}
+              onPick={setConfirmedAmount}
+              onSave={() =>
+                save(
+                  confirmedAmount,
+                  merchant || (direction === "income" ? "Income" : "Lunch"),
+                )
+              }
+              onSwitchToManual={() => setMode("manual")}
+            />
+          ) : (
+            <ManualState
+              key="manual"
+              amount={amount}
+              setAmount={setAmount}
+              merchant={merchant}
+              setMerchant={setMerchant}
+              categoryId={categoryId}
+              setCategoryId={setCategoryId}
+              direction={direction}
+              setDirection={setDirection}
+              categories={categories}
+              categoryName={category?.name ?? "your account"}
+              parseError={parseError}
+              onSave={() => save(amount, merchant)}
+            />
+          )}
+        </AnimatePresence>
+      </BottomSheet>
+    );
+  },
+);
 
 function ListeningState({
   transcript,
@@ -577,7 +612,10 @@ function ParsingState({ transcript }: { transcript: string }) {
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.24 }}
     >
-      <div className="voice-orb listening" style={{ viewTransitionName: "echo-orb" }}>
+      <div
+        className="voice-orb listening"
+        style={{ viewTransitionName: "echo-orb" }}
+      >
         <span className="orb-pulse-ring" />
         <span className="orb-pulse-ring" />
         <span className="orb-pulse-ring" />
@@ -646,7 +684,11 @@ function AnswerState({
                     backgroundColor: "var(--surface-3, rgba(0,0,0,0.04))",
                   }}
                 >
-                  {row.icon === "CircleDollarSign" ? <CircleDollarSign size={14} /> : row.icon}
+                  {row.icon === "CircleDollarSign" ? (
+                    <CircleDollarSign size={14} />
+                  ) : (
+                    row.icon
+                  )}
                 </span>
                 <span className="truncate font-medium">{row.merchantRaw}</span>
               </div>
@@ -735,9 +777,7 @@ function ConfirmState({
         </div>
         <div>
           <p className="font-medium">{merchant}</p>
-          <p className="text-sm text-muted-foreground">
-            Voice capture · Today
-          </p>
+          <p className="text-sm text-muted-foreground">Voice capture · Today</p>
         </div>
       </div>
       <div className="mt-4">
