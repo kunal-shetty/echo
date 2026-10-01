@@ -52,7 +52,9 @@ export function HomeScreen() {
               <Mic size={17} />
             </span>
             <span className="min-w-0">
-              <span className="block text-sm font-medium">Remember by voice</span>
+              <span className="block text-sm font-medium">
+                Remember by voice
+              </span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 Just talk naturally
               </span>
@@ -79,7 +81,10 @@ export function HomeScreen() {
         </div>
 
         {empty ? (
-          <EmptyState onVoice={() => setVoiceOpen(true)} configured={configured} />
+          <EmptyState
+            onVoice={() => setVoiceOpen(true)}
+            configured={configured}
+          />
         ) : (
           <>
             <div className="section-heading">
@@ -94,7 +99,12 @@ export function HomeScreen() {
             </div>
             <div className="divide-y divide-border rounded-2xl bg-surface-1 px-3">
               {expenses.slice(0, 4).map((item, i) => (
-                <TransactionRow item={item} index={i} key={item.id} onClick={() => {}} />
+                <TransactionRow
+                  item={item}
+                  index={i}
+                  key={item.id}
+                  onClick={() => {}}
+                />
               ))}
             </div>
           </>
