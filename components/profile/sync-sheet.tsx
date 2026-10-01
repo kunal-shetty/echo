@@ -145,9 +145,7 @@ export function SyncSheet({
               autoFocus
               autoComplete="email"
             />
-            {error && (
-              <p className="text-xs text-orange">{error}</p>
-            )}
+            {error && <p className="text-xs text-orange">{error}</p>}
             <motion.button
               type="button"
               className="primary-button"
@@ -177,8 +175,8 @@ export function SyncSheet({
           >
             <p className="text-sm leading-6 text-muted-foreground">
               We sent a 6-digit code to{" "}
-              <span className="font-medium text-foreground">{email}</span>.
-              It expires in 10 minutes.
+              <span className="font-medium text-foreground">{email}</span>. It
+              expires in 10 minutes.
             </p>
             <Field
               label="Verification code"
@@ -222,9 +220,7 @@ export function SyncSheet({
                 onClick={start}
                 className="transition-colors hover:text-foreground disabled:opacity-50"
               >
-                {resendTimer > 0
-                  ? `Resend in ${resendTimer}s`
-                  : "Resend code"}
+                {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend code"}
               </button>
             </div>
           </motion.div>
