@@ -6,10 +6,14 @@
  */
 
 import { NextResponse } from "next/server.js";
-import { getOrCreateUserRow } from "@/lib/server/user";
+import { isSupabaseConfigured } from "@/lib/server/supabase";
+import { serverError } from "@/lib/server/http";
+import { rateLimit } from "@/lib/server/rate-limit";
 import {
+  countRecentOtps,
   generateCode,
   isResendConfigured,
+  MAX_SENDS_PER_HOUR,
   sendOtpEmail,
   storeOtp,
 } from "@/lib/server/otp";
@@ -20,53 +24,51 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Handles the initial request to send an OTP.
- * Flow: Validate Email $\to$ Ensure User Row $\to$ Check Config $\to$ Generate $\to$ Store $\to$ Send.
+ * Flow: Rate limit → Validate Email → Check Config → Throttle per email → Generate → Store → Send.
  */
 export async function POST(req: Request) {
-  let body: { email?: string };
+  const limited = rateLimit(req, "auth-start", 10, 10 * 60 * 1000);
+  if (limited) return limited;
+
+  let body: { email?: unknown };
   try {
-    body = (await req.json()) as { email?: string };
+    body = (await req.json()) as { email?: unknown };
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  const email = body.email?.trim().toLowerCase();
-  if (!email || !EMAIL_RE.test(email)) {
+  const email =
+    typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!email || email.length > 254 || !EMAIL_RE.test(email)) {
     return NextResponse.json(
       { error: "Please enter a valid email address." },
       { status: 400 },
     );
   }
 
-  // Ensure the current device has a user row even if they've never
-  // explicitly logged in — otherwise verify can't find anything to update.
-  const user = await getOrCreateUserRow();
-
-  if (!isResendConfigured()) {
+  if (!isSupabaseConfigured() || !isResendConfigured()) {
     return NextResponse.json(
       {
-        error:
-          "Email sync isn't configured on this deployment. Set RESEND_API_KEY and RESEND_FROM.",
+        error: "Email sync isn't configured on this deployment.",
         code: "resend_not_configured",
       },
       { status: 503 },
     );
   }
 
-  const code = generateCode();
-  await storeOtp(email, code);
-
   try {
+    if ((await countRecentOtps(email)) >= MAX_SENDS_PER_HOUR) {
+      return NextResponse.json(
+        { error: "Too many codes requested. Try again in an hour." },
+        { status: 429 },
+      );
+    }
+
+    const code = generateCode();
+    await storeOtp(email, code);
     await sendOtpEmail(email, code);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Failed to send email";
-    return NextResponse.json(
-      { error: `Could not send email: ${message}` },
-      { status: 502 },
-    );
+    return serverError(e, "auth/start");
   }
 
-  return NextResponse.json({
-    sent: true,
-    userId: user?.id ?? null,
-  });
+  return NextResponse.json({ sent: true });
 }
