@@ -9,6 +9,8 @@ import { isSupabaseConfigured } from "@/lib/server/supabase";
 import { deleteCategory, updateCategory } from "@/lib/server/categories";
 import { isIconName } from "@/lib/icon-vocab";
 import { getCurrentUserId } from "@/lib/server/user";
+import { isUuid } from "@/lib/server/ids";
+import { serverError } from "@/lib/server/http";
 
 export const runtime = "nodejs";
 
@@ -46,9 +48,12 @@ export async function PATCH(
   }
   const userId = await getCurrentUserId();
   if (!userId) {
-    return NextResponse.json({ error: "No device identity." }, { status: 400 });
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   const { id } = await ctx.params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   let body: PatchCategoryBody;
   try {
@@ -58,8 +63,11 @@ export async function PATCH(
   }
 
   const patch: Parameters<typeof updateCategory>[2] = {};
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   if (body.name !== undefined) {
-    const name = body.name.trim();
+    const name = typeof body.name === "string" ? body.name.trim() : "";
     if (name.length < 1 || name.length > 40) {
       return NextResponse.json(
         { error: "Name must be 1–40 characters" },
@@ -78,7 +86,7 @@ export async function PATCH(
     }
   }
   if (body.tone !== undefined) {
-    if (!TONES.has(body.tone)) {
+    if (typeof body.tone !== "string" || !TONES.has(body.tone)) {
       return NextResponse.json({ error: "Unknown tone" }, { status: 400 });
     }
     patch.tone = body.tone as Parameters<typeof updateCategory>[2]["tone"];
@@ -113,7 +121,7 @@ export async function PATCH(
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverError(e, "categories/[id]");
   }
 }
 
@@ -134,9 +142,12 @@ export async function DELETE(
   }
   const userId = await getCurrentUserId();
   if (!userId) {
-    return NextResponse.json({ error: "No device identity." }, { status: 400 });
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   const { id } = await ctx.params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   try {
     const ok = await deleteCategory(userId, id);
     if (!ok) {
@@ -153,6 +164,6 @@ export async function DELETE(
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverError(e, "categories/[id]");
   }
 }
