@@ -1,30 +1,32 @@
 # Sync & Migration
 
-This document describes the process of synchronizing data across devices and migrating guest data to a cloud account.
+This document describes how data follows a user across devices.
 
 ## Overview
-Echo ensures that a user's financial history is preserved regardless of the device they use. This is achieved through a "Merge-on-Auth" strategy.
+Every browser starts as a guest with its own server-side account. Verifying
+an email links that browser to the account that owns the email.
 
 ## The Sync Process
-When a user authenticates on a new device:
-1. **Identity Match**: The system checks if the authenticated email is already linked to a `user_id` in the database.
-2. **Local Discovery**: The app checks for any existing guest transactions in the local storage of the current device.
-3. **Conflict Resolution**:
-    - If local transactions exist and the user is now authenticated, the system triggers a migration.
-    - The local records are uploaded to the server and associated with the verified `user_id`.
-4. **State Update**: The `useTransactions` hook switches from `LocalStorageProvider` to `ApiStorageProvider`.
+When a user verifies an email on a device (`POST /api/auth/verify`):
+1. **Identity match**: the server looks up the account that owns the email.
+2. **Merge**: if this device is currently a guest and a different account
+   owns the email, the database function `merge_user_data(guest, owner)`
+   moves the guest's data into the owner's account in one transaction:
+   - transactions and recurring rules move onto the owner's default account;
+   - categories with the same name collapse onto the owner's copy;
+   - aliases and budgets keep the owner's row on conflict;
+   - voice sessions move over; insights are dropped (they're regenerated);
+   - the guest user (with its accounts and sessions) is deleted.
+3. **Sign-in**: the session is rotated to point at the owner's account.
+4. **Refresh**: the client reloads its transaction list
+   (`components/profile/sync-sheet.tsx`).
 
-## Technical Implementation (`__tests__/api/auth-verify.test.ts`)
-The migration logic is handled during the `/api/auth/verify` call:
-- The server identifies the "old" device ID associated with the email.
-- It performs a bulk update across several tables:
-    - `accounts`
-    - `merchant_aliases`
-    - `transactions`
-    - `budgets`
-    - `insights`
-- This effectively "moves" the history from the guest account to the verified account.
-- Finally, the orphaned guest record in the `users` table is deleted to keep the database clean.
+## Safety
+The merge only ever runs from the caller's **own** guest account into the
+account they just proved they own with the email code. It never moves data
+out of a verified account, and two verified accounts are never merged:
+signing in to a second email from a verified device just switches accounts.
 
 ## User Experience
-To the user, this feels seamless: they log in, and their previous guest memories simply "appear" in their synced account.
+Users log in on a new device and their history is there; anything they
+recorded as a guest on that device is added to it.
