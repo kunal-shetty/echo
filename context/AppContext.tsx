@@ -69,7 +69,7 @@ export function AppContextProvider({
   }, []);
 
   const updateUser = (patch: Partial<UserInfo>) => {
-    setUser((u) => {
+    setUser((u: UserInfo) => {
       const next = { ...u, ...patch };
       try {
         window.localStorage.setItem("echo-user-info-v1", JSON.stringify(next));
