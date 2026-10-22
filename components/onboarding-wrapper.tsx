@@ -3,13 +3,13 @@
 import { useApp } from "@/context/AppContext";
 import { Onboarding } from "@/components/onboarding";
 import { useTransactions } from "@/lib/use-transactions";
-import { Transaction } from "@/lib/schema";
+import type { Transaction, UserInfo } from "@/lib/schema";
 
 export function OnboardingWrapper({ children }: { children: React.ReactNode }) {
-  const { onboarded, setOnboarded, user, setUser } = useApp();
+  const { onboarded, setOnboarded, setUser } = useApp();
   const tx = useTransactions();
 
-  const completeOnboarding = async (expense: Transaction, info: any) => {
+  const completeOnboarding = async (expense: Transaction, info: UserInfo) => {
     setUser(info);
     try {
       window.localStorage.setItem("echo-onboarded-v1", "true");
