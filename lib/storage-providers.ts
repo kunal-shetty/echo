@@ -1,132 +1,65 @@
 import type { Transaction } from "@/lib/schema";
+import type { BulkRowInput, EditTransactionPatch } from "@/lib/use-transactions";
 
-export interface StorageProvider {
-  list: () => Promise<Transaction[]>;
-  add: (tx: Partial<Transaction>) => Promise<Transaction | null>;
-  update: (id: string, patch: any) => Promise<Transaction | null>;
-  remove: (id: string) => Promise<boolean>;
-  bulkAdd: (rows: any[]) => Promise<{ transactions: Transaction[]; failures: any[] }>;
-}
+/** Key older versions of Echo used to keep guest transactions in the browser. */
+const LEGACY_LOCAL_KEY = "echo-tx-local-v1";
 
-export class LocalStorageProvider implements StorageProvider {
-  private readonly KEY = "echo-tx-local-v1";
-
-  private getLocalTxs(): Transaction[] {
-    try {
-      const data = window.localStorage.getItem(this.KEY);
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private setLocalTxs(txs: Transaction[]): void {
-    try {
-      window.localStorage.setItem(this.KEY, JSON.stringify(txs));
-    } catch {
-      console.error("Failed to save transactions to localStorage");
-    }
-  }
-
-  async list(): Promise<Transaction[]> {
-    return this.getLocalTxs();
-  }
-
-  async add(patch: Partial<Transaction>): Promise<Transaction | null> {
-    const txs = this.getLocalTxs();
-    const newTx: Transaction = {
-      id: crypto.randomUUID(),
-      userId: "guest",
-      amountMinor: patch.amountMinor ?? 0,
-      currency: patch.currency ?? "INR",
-      direction: patch.direction ?? "expense",
-      merchantRaw: patch.merchantRaw ?? "Unknown",
-      merchantCanonical: patch.merchantCanonical ?? patch.merchantRaw,
-      categoryId: patch.categoryId ?? null,
-      source: patch.source ?? "manual",
-      confidence: patch.confidence ?? null,
-      rawTranscript: patch.rawTranscript ?? null,
-      transactedAt: patch.transactedAt ?? new Date().toISOString(),
-      note: patch.note ?? null,
-      clarified: patch.clarified ?? false,
-      createdAt: new Date().toISOString(),
-      date: new Date().toISOString().split('T')[0],
-      icon: 'CircleDollarSign',
-      tone: 'neutral',
-      categoryName: 'Uncategorized'
-    } as Transaction;
-
-    this.setLocalTxs([newTx, ...txs]);
-    return newTx;
-  }
-
-  async update(id: string, patch: any): Promise<Transaction | null> {
-    const txs = this.getLocalTxs();
-    const index = txs.findIndex(t => t.id === id);
-    if (index === -1) return null;
-
-    const updated = { ...txs[index], ...patch };
-    txs[index] = updated;
-    this.setLocalTxs(txs);
-    return updated;
-  }
-
-  async remove(id: string): Promise<boolean> {
-    const txs = this.getLocalTxs();
-    const filtered = txs.filter(t => t.id !== id);
-    if (txs.length === filtered.length) return false;
-    this.setLocalTxs(filtered);
-    return true;
-  }
-
-  async bulkAdd(rows: any[]): Promise<{ transactions: Transaction[]; failures: any[] }> {
-    const txs = this.getLocalTxs();
-    const inserted: Transaction[] = [];
-    const failures: any[] = [];
-
-    rows.forEach((row, idx) => {
-      try {
-        const newTx: Transaction = {
-          id: crypto.randomUUID(),
-          userId: "guest",
-          amountMinor: row.amountMinor,
-          currency: row.currency ?? "INR",
-          direction: row.direction ?? "expense",
-          merchantRaw: row.merchantRaw,
-          merchantCanonical: row.merchantCanonical ?? row.merchantRaw,
-          categoryId: row.categoryId ?? null,
-          source: "import",
-          confidence: null,
-          rawTranscript: null,
-          transactedAt: row.date ?? new Date().toISOString(),
-          note: row.note ?? null,
-          clarified: false,
-          createdAt: new Date().toISOString(),
-          date: row.date ?? new Date().toISOString().split('T')[0],
-          icon: 'CircleDollarSign',
-          tone: 'neutral',
-          categoryName: row.categoryName ?? 'Uncategorized'
-        } as Transaction;
-        inserted.push(newTx);
-      } catch (e: any) {
-        failures.push({ rowIndex: idx, error: e.message });
-      }
-    });
-
-    this.setLocalTxs([...inserted, ...txs]);
-    return { transactions: inserted, failures };
+/** Reads transactions left in localStorage by older versions of Echo. */
+export function readLegacyLocalTransactions(): Transaction[] {
+  try {
+    const data = window.localStorage.getItem(LEGACY_LOCAL_KEY);
+    const parsed: unknown = data ? JSON.parse(data) : [];
+    return Array.isArray(parsed) ? (parsed as Transaction[]) : [];
+  } catch {
+    return [];
   }
 }
 
-export class ApiStorageProvider implements StorageProvider {
-  async list(): Promise<Transaction[]> {
+export function clearLegacyLocalTransactions(): void {
+  try {
+    window.localStorage.removeItem(LEGACY_LOCAL_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Reads `{ error }` from a failed response, falling back to the status. */
+async function errorFrom(res: Response, action: string): Promise<Error> {
+  const json = (await res.json().catch(() => ({}))) as { error?: string };
+  return new Error(json.error ?? `${action} failed (${res.status})`);
+}
+
+function patchToBody(patch: EditTransactionPatch): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (patch.amountMinor !== undefined) body.amount_minor = patch.amountMinor;
+  if (patch.currency !== undefined) body.currency = patch.currency;
+  if (patch.merchantRaw !== undefined) body.merchant_raw = patch.merchantRaw;
+  if (patch.merchantCanonical !== undefined) {
+    body.merchant_canonical = patch.merchantCanonical;
+  }
+  if (patch.categoryId !== undefined) body.category_id = patch.categoryId;
+  if (patch.note !== undefined) body.note = patch.note;
+  if (patch.transactedAt !== undefined) body.transacted_at = patch.transactedAt;
+  if (patch.direction !== undefined) body.direction = patch.direction;
+  return body;
+}
+
+/** Client for the /api/transactions endpoints. Throws on failure. */
+export class ApiStorageProvider {
+  async list(): Promise<{ transactions: Transaction[]; configured: boolean }> {
     const res = await fetch("/api/transactions", { cache: "no-store" });
-    if (!res.ok) throw new Error(`Failed to load (${res.status})`);
-    const json = await res.json();
-    return json.transactions ?? [];
+    if (!res.ok) throw await errorFrom(res, "Load");
+    const json = (await res.json()) as {
+      transactions?: Transaction[];
+      configured?: boolean;
+    };
+    return {
+      transactions: json.transactions ?? [],
+      configured: json.configured !== false,
+    };
   }
 
-  async add(patch: Partial<Transaction>): Promise<Transaction | null> {
+  async add(patch: Partial<Transaction>): Promise<Transaction> {
     const res = await fetch("/api/transactions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -144,38 +77,70 @@ export class ApiStorageProvider implements StorageProvider {
         note: patch.note ?? null,
       }),
     });
-    if (!res.ok) return null;
-    const json = await res.json();
+    if (!res.ok) throw await errorFrom(res, "Save");
+    const json = (await res.json()) as { transaction: Transaction };
     return json.transaction;
   }
 
-  async update(id: string, patch: any): Promise<Transaction | null> {
-    const res = await fetch(`/api/transactions/${id}`, {
+  async update(id: string, patch: EditTransactionPatch): Promise<Transaction> {
+    const res = await fetch(`/api/transactions/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
+      body: JSON.stringify(patchToBody(patch)),
     });
-    if (!res.ok) return null;
-    const json = await res.json();
+    if (!res.ok) throw await errorFrom(res, "Update");
+    const json = (await res.json()) as { transaction: Transaction };
     return json.transaction;
   }
 
+  /** @returns True once the transaction is gone (including "already gone"). */
   async remove(id: string): Promise<boolean> {
-    const res = await fetch(`/api/transactions/${id}`, { method: "DELETE" });
-    return res.status === 204 || res.status === 404;
+    const res = await fetch(`/api/transactions/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    if (res.status === 204 || res.status === 404) return true;
+    throw await errorFrom(res, "Delete");
   }
 
-  async bulkAdd(rows: any[]): Promise<{ transactions: Transaction[]; failures: any[] }> {
+  async bulkAdd(rows: BulkRowInput[]): Promise<{
+    transactions: Transaction[];
+    failures: Array<{ rowIndex: number; error: string }>;
+  }> {
     const res = await fetch("/api/transactions/bulk", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows }),
+      body: JSON.stringify({
+        rows: rows.map((r) => ({
+          date: r.date ?? null,
+          amount_minor: r.amountMinor,
+          currency: r.currency,
+          merchant_raw: r.merchantRaw,
+          merchant_canonical: r.merchantCanonical,
+          category_id: r.categoryId ?? null,
+          category_name: r.categoryName ?? null,
+          note: r.note ?? null,
+          direction: r.direction,
+        })),
+      }),
     });
-    if (!res.ok) return { transactions: [], failures: [] };
-    const json = await res.json();
+    if (!res.ok) throw await errorFrom(res, "Import");
+    const json = (await res.json()) as {
+      transactions?: Transaction[];
+      failures?: Array<{ rowIndex: number; error: string }>;
+    };
     return {
       transactions: json.transactions ?? [],
       failures: json.failures ?? [],
     };
+  }
+
+  /** Uploads transactions from older, browser-only versions of Echo. */
+  async migrate(transactions: Transaction[]): Promise<void> {
+    const res = await fetch("/api/transactions/migrate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transactions }),
+    });
+    if (!res.ok) throw await errorFrom(res, "Migration");
   }
 }
