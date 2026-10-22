@@ -59,6 +59,13 @@ export interface Category {
   sortOrder: number;
 }
 
+/** Profile preferences collected during onboarding. */
+export interface UserInfo {
+  name: string;
+  currency: "INR" | "USD" | "EUR" | "GBP";
+  reminderTime: "morning" | "evening" | "off";
+}
+
 /** A single financial transaction. */
 export interface Transaction {
   id: string;
