@@ -1,117 +1,119 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { POST } from '@/app/api/insights/generate/route';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { fakeSupabase } from '../helpers/fake-supabase';
 
-// Create a mock client object that we can easily control
-const mockSupabaseClient = {
-  from: vi.fn().mockReturnThis(),
-  select: vi.fn().mockReturnThis(),
-  eq: vi.fn().mockReturnThis(),
-  is: vi.fn(),
-  delete: vi.fn().mockReturnThis(),
-  insert: vi.fn().mockResolvedValue({ error: null }),
-};
+let db = fakeSupabase();
 
 vi.mock('@/lib/server/supabase', () => ({
-  getSupabaseAdmin: vi.fn(() => mockSupabaseClient),
+  isSupabaseConfigured: vi.fn(() => true),
+  getSupabaseAdmin: vi.fn(() => db.client),
 }));
 
 vi.mock('@/lib/server/user', () => ({
-  getDeviceUserId: vi.fn(() => Promise.resolve('user-123')),
   getCurrentUserId: vi.fn(() => Promise.resolve('user-123')),
 }));
 
-vi.mock('@/lib/server/categories', () => ({
-  listSystemCategories: vi.fn(() => Promise.resolve([
-    { id: 'cat-1', name: 'Food' },
-    { id: 'cat-2', name: 'Housing' },
-  ])),
-}));
-
-vi.mock('@/lib/fmt', () => ({
-  money: vi.fn((val) => `$${(val / 100).toFixed(2)}`),
-}));
-
-vi.mock('@/lib/groq', () => ({
+vi.mock('@/lib/groq', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/groq')>()),
   generateSmartInsights: vi.fn(),
 }));
+
+const { POST } = await import('@/app/api/insights/generate/route');
+const groq = await import('@/lib/groq');
+const { getCurrentUserId } = await import('@/lib/server/user');
+const { resetRateLimits } = await import('@/lib/server/rate-limit');
+
+const generate = () =>
+  POST(new Request('http://localhost/api/insights/generate', { method: 'POST' }));
 
 describe('POST /api/insights/generate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetRateLimits();
+    db = fakeSupabase();
     vi.stubEnv('GROQ_API_KEY', 'test-key');
   });
+  afterEach(() => vi.unstubAllEnvs());
 
-
-  it('should return 400 if no device identity', async () => {
-    const { getCurrentUserId } = await import('@/lib/server/user');
-    (getCurrentUserId as any).mockResolvedValueOnce(null);
-
-
-    const res = await POST(new Request('http://localhost/api/insights/generate', { method: 'POST' }));
-    const data = await res.json();
-
-    expect(res.status).toBe(400);
-    expect(data.error).toBe('No device identity.');
+  it('returns a friendly message (not an error) without a session', async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValueOnce(null);
+    const res = await generate();
+    expect(res.status).toBe(200);
+    expect((await res.json()).message).toBe('No transactions found to analyze.');
+    expect(groq.generateSmartInsights).not.toHaveBeenCalled();
   });
 
-  it('should generate anomaly, habit, and loyalty insights', async () => {
-    const { generateSmartInsights } = await import('@/lib/groq');
-    (generateSmartInsights as any).mockResolvedValue([
-      { kind: 'anomaly', payload: { title: 'Biggest Memory', hero_metric: '$50.00' } },
-      { kind: 'spend_pattern', payload: { text: 'Your spending on Housing is high', hero_metric: '$50.00' } },
+  it("generates and stores insights from the user's transactions", async () => {
+    const insights = [
+      { kind: 'anomaly', payload: { title: 'Biggest Memory', hero_metric: '₹50' } },
       { kind: 'trend', payload: { text: 'You visited Coffee Shop 2 times', hero_metric: '2x' } },
-    ]);
-
-    const mockTxs = [
-      { amount_minor: 1000, merchant_raw: 'Coffee', category_id: 'cat-1', merchant_canonical: 'Coffee Shop' },
-      { amount_minor: 5000, merchant_raw: 'Rent', category_id: 'cat-2', merchant_canonical: 'Landlord' },
-      { amount_minor: 1000, merchant_raw: 'Lunch', category_id: 'cat-1', merchant_canonical: 'Coffee Shop' },
     ];
+    vi.mocked(groq.generateSmartInsights).mockResolvedValue(insights);
+    db = fakeSupabase({
+      transactions: [{ data: [{ amount_minor: 1000, merchant_raw: 'Coffee' }] }],
+    });
 
-
-    mockSupabaseClient.is.mockResolvedValue({ data: mockTxs, error: null });
-
-    const res = await POST(new Request('http://localhost/api/insights/generate', { method: 'POST' }));
+    const res = await generate();
     const data = await res.json();
-
-    if (res.status !== 200) {
-      console.error('Error Response:', data);
-    }
     expect(res.status).toBe(200);
-    expect(data.insights).toBeDefined();
-    expect(data.insights).toHaveLength(3);
-
-    // Anomaly: Biggest spend
-    const anomaly = data.insights.find((i: any) => i.kind === 'anomaly');
-    expect(anomaly.payload.title).toBe('Biggest Memory');
-    expect(anomaly.payload.hero_metric).toBe('$50.00');
-
-    // Habit: Top category (cat-2 has 5000 total)
-    const habit = data.insights.find((i: any) => i.kind === 'spend_pattern');
-    expect(habit.payload.text).toContain('Housing');
-    expect(habit.payload.hero_metric).toBe('$50.00');
-
-    // Loyalty: Most visited merchant (Coffee Shop has 2)
-    const loyalty = data.insights.find((i: any) => i.kind === 'trend');
-    expect(loyalty.payload.text).toContain('Coffee Shop 2 times');
-    expect(loyalty.payload.hero_metric).toBe('2x');
-
-    // Verify DB cleanup and insert
-    expect(mockSupabaseClient.from).toHaveBeenCalledWith('insights');
-    expect(mockSupabaseClient.delete).toHaveBeenCalled();
-    expect(mockSupabaseClient.insert).toHaveBeenCalled();
+    expect(data.insights).toEqual(insights);
+    expect(db.called('transactions', 'eq', 'user_id', 'user-123')).toBe(true);
+    expect(db.called('transactions', 'limit')).toBe(true);
+    expect(db.called('insights', 'delete')).toBe(true);
+    expect(db.called('insights', 'insert')).toBe(true);
   });
 
   it('should return message if no transactions are found', async () => {
-    mockSupabaseClient.is.mockResolvedValue({ data: [], error: null });
-
-    const res = await POST(new Request('http://localhost/api/insights/generate', { method: 'POST' }));
-    const data = await res.json();
-
-    if (res.status !== 200) {
-      console.error('Error Response:', data);
-    }
+    db = fakeSupabase({ transactions: [{ data: [] }] });
+    const res = await generate();
     expect(res.status).toBe(200);
-    expect(data.message).toBe('No transactions found to analyze.');
+    expect((await res.json()).message).toBe('No transactions found to analyze.');
+  });
+
+  it('is rate limited', async () => {
+    db = fakeSupabase({ transactions: Array(10).fill({ data: [] }) });
+    for (let i = 0; i < 5; i++) expect((await generate()).status).toBe(200);
+    expect((await generate()).status).toBe(429);
+  });
+});
+
+const { generateSmartInsights } =
+  await vi.importActual<typeof import('@/lib/groq')>('@/lib/groq');
+
+describe('generateSmartInsights', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function groqReplies(content: string) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ id: 'cmpl-1', choices: [{ message: { content } }] })),
+      ),
+    );
+  }
+
+  it('reads insights from the model message, not the HTTP envelope', async () => {
+    groqReplies(
+      JSON.stringify({
+        insights: [{ kind: 'anomaly', title: 'Spike', text: 'Food doubled', hero_metric: '₹2,000' }],
+      }),
+    );
+    const out = await generateSmartInsights([], 'key');
+    expect(out).toEqual([
+      {
+        kind: 'anomaly',
+        payload: { title: 'Spike', text: 'Food doubled', hero_metric: '₹2,000', cta: 'View details' },
+      },
+    ]);
+  });
+
+  it('maps unknown kinds onto a valid enum value', async () => {
+    groqReplies(JSON.stringify([{ kind: 'loyalty', title: 'x' }]));
+    const [first] = await generateSmartInsights([], 'key');
+    expect(first.kind).toBe('trend');
+  });
+
+  it('returns nothing for unparseable model output', async () => {
+    groqReplies('not json at all');
+    expect(await generateSmartInsights([], 'key')).toEqual([]);
   });
 });
