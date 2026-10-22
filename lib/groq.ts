@@ -185,7 +185,7 @@ export async function generateReasonedResponse(
   apiKey: string,
 ): Promise<string> {
   const now = new Date();
-  const today = formatHumanDate(now);
+  const today = formatHumanDate(now.toISOString());
 
   const system = `You are Echo, a concise and encouraging finance coach.
 Today is ${today}.
@@ -288,19 +288,48 @@ export async function generateSmartInsights(
 
   if (!res.ok) throw new Error(`Groq insights failed: ${res.status}`);
 
-  const json = await res.json();
-  // Groq might return { insights: [...] } or just the array
-  const insights = json.insights || (Array.isArray(json) ? json : Object.values(json)[0]);
+  const json = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  let parsed: unknown = null;
+  try {
+    parsed = JSON.parse(json.choices?.[0]?.message?.content ?? "null");
+  } catch {
+    parsed = null;
+  }
+  // The model may return { insights: [...] }, a bare array, or an object
+  // wrapping the array under some other key.
+  const insights = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object"
+      ? (Object.values(parsed).find(Array.isArray) ?? [])
+      : [];
 
-  return (Array.isArray(insights) ? insights : []).map(i => ({
-    kind: i.kind || 'trend',
-    payload: {
-      title: i.title || "Insight",
-      text: i.text || "",
-      hero_metric: i.hero_metric || "",
-      cta: i.cta || "View details"
-    }
-  }));
+  return (insights as Array<Record<string, unknown>>)
+    .filter((i) => i && typeof i === "object")
+    .slice(0, 5)
+    .map((i) => ({
+      kind: INSIGHT_KINDS.has(i.kind as string) ? (i.kind as string) : "trend",
+      payload: {
+        title: textOr(i.title, "Insight", 80),
+        text: textOr(i.text, "", 400),
+        hero_metric: textOr(i.hero_metric, "", 40),
+        cta: textOr(i.cta, "View details", 60),
+      },
+    }));
+}
+
+/** Values of the `insight_kind` enum in schema.sql. */
+const INSIGHT_KINDS = new Set([
+  "spend_pattern",
+  "anomaly",
+  "trend",
+  "subscription_check",
+  "budget_alert",
+]);
+
+function textOr(v: unknown, fallback: string, max: number): string {
+  return typeof v === "string" && v.trim() ? v.trim().slice(0, max) : fallback;
 }
 
 interface GroqParseResponse {
