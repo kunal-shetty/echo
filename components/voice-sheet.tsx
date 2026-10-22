@@ -19,8 +19,6 @@ import { money, normalizeTranscript } from "@/lib/fmt";
 import { toUiCategory, useCategories } from "@/lib/use-categories";
 import { useSpeech } from "@/lib/use-speech";
 import { useSpeechSynth } from "@/lib/use-speech-synth";
-import { executeNlqSpec } from "@/lib/nlq-executor";
-import { useTransactions } from "@/lib/use-transactions";
 import type { ParseResult } from "@/lib/parse";
 import type { Transaction } from "@/lib/schema";
 
@@ -36,17 +34,28 @@ interface AnswerState {
 interface VoiceSheetProps {
   open: boolean;
   onClose: () => void;
+  /** A draft the user confirmed; the parent must save it. */
   onSave: (expense: Transaction) => void;
+  /** A transaction the server already saved; the parent just shows it. */
+  onCreated?: (expense: Transaction) => void;
   onUpdated?: (expense: Transaction) => void;
   onDeleted?: (id: string) => void;
 }
 
-export const VoiceSheet = forwardRef(
-  ({ open, onClose, onSave, onUpdated, onDeleted }, ref: any) => {
-    const [sessionId] = useState(() => Math.random().toString(36).substring(7));
+/** Imperative controls the shell uses to drive the microphone. */
+export interface VoiceSheetHandle {
+  start: () => void;
+  stop: () => void;
+}
+
+export const VoiceSheet = forwardRef<VoiceSheetHandle, VoiceSheetProps>(
+  function VoiceSheet(
+    { open, onClose, onSave, onCreated, onUpdated, onDeleted },
+    ref,
+  ) {
+    const [sessionId] = useState(() => crypto.randomUUID());
     const { categories: rawCats } = useCategories();
     const categories = rawCats.map(toUiCategory);
-    const { transactions, provider } = useTransactions();
     const [mode, setMode] = useState<CaptureMode>("listening");
     const [confirmedAmount, setConfirmedAmount] = useState(150);
     const [amount, setAmount] = useState(0);
@@ -70,127 +79,37 @@ export const VoiceSheet = forwardRef(
               lowered,
             );
           if (looksLikeQuestion) {
-            // Determine if we should query local or API storage
-            const isLocal =
-              provider instanceof
-              (await import("@/lib/storage-providers").then(
-                (m) => m.LocalStorageProvider,
-              ));
-
-            if (isLocal) {
-              // Hybrid Flow for Local Storage:
-              // 1. Parse the intent on the server
-              const parseRes = await fetch("/api/ask", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ transcript: text, parseOnly: true }),
-              });
-              const parseData = (await parseRes.json()) as {
-                result: ParseResult;
-              };
-              const parsed = parseData.result;
-
-              // 2. Execute the query locally
-              let resultData: { total: number | null; rows: Transaction[] };
-              if (parsed.nlqSpec) {
-                resultData = executeNlqSpec(transactions, parsed.nlqSpec);
-              } else {
-                // Fallback to basic filtering if no nlqSpec
-                const filtered = transactions.filter((t) => {
-                  if (parsed.queryCategory) {
-                    if (
-                      !t.categoryName
-                        ?.toLowerCase()
-                        .includes(parsed.queryCategory!.toLowerCase())
-                    )
-                      return false;
-                  }
-                  if (parsed.queryMerchant) {
-                    if (
-                      !t.merchantRaw
-                        .toLowerCase()
-                        .includes(parsed.queryMerchant!.toLowerCase())
-                    )
-                      return false;
-                  }
-                  if (
-                    parsed.queryDirection &&
-                    t.direction !== parsed.queryDirection
-                  )
-                    return false;
-                  return true;
-                });
-                const total = filtered.reduce(
-                  (acc, t) => acc + Number(t.amountMinor),
-                  0,
-                );
-                resultData = { total, rows: filtered };
-              }
-
-              // 3. Generate conversational response on the server
-              const respondRes = await fetch("/api/ask", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  transcript: text,
-                  respondOnly: true,
-                  result: {
-                    total: resultData.total,
-                    rows: resultData.rows,
-                    kind: parsed.queryKind ?? "sum",
-                    range: parsed.queryRange ?? "all",
-                    headline: "", // Server will generate this
-                    spoken: "",
-                  },
-                }),
-              });
-              const respondData = (await respondRes.json()) as {
+            const askRes = await fetch("/api/ask", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ transcript: text, sessionId }),
+            });
+            const askData = (await askRes.json().catch(() => ({}))) as {
+              result?: ParseResult;
+              query?: {
+                headline: string;
                 spoken: string;
+                rows: Transaction[];
+                kind: "sum" | "list" | "biggest";
               };
-
-              setAnswer({
-                headline: `Local Result: ${resultData.total ? money(resultData.total) : "No data"}`,
-                spoken: respondData.spoken,
-                rows: resultData.rows,
-                kind: parsed.queryKind ?? "sum",
-              });
-              setMode("answer");
-              if (respondData.spoken) synth.speak(respondData.spoken);
-              return;
-            } else {
-              // Standard Flow for API Storage
-              const askRes = await fetch("/api/ask", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ transcript: text, sessionId }),
-              });
-              const askData = (await askRes.json().catch(() => ({}))) as {
-                result?: ParseResult;
-                query?: {
-                  headline: string;
-                  spoken: string;
-                  rows: Transaction[];
-                  kind: "sum" | "list" | "biggest";
-                };
-                error?: string;
-                warning?: string;
-              };
-              if (!askRes.ok || askData.error) {
-                throw new Error(askData.error ?? `HTTP ${askRes.status}`);
-              }
-              if (!askData.query) {
-                throw new Error("Empty response from /api/ask");
-              }
-              setAnswer({
-                headline: askData.query.headline,
-                spoken: askData.query.spoken,
-                rows: askData.query.rows ?? [],
-                kind: askData.query.kind,
-              });
-              setMode("answer");
-              if (askData.query.spoken) synth.speak(askData.query.spoken);
-              return;
+              error?: string;
+              warning?: string;
+            };
+            if (!askRes.ok || askData.error) {
+              throw new Error(askData.error ?? `HTTP ${askRes.status}`);
             }
+            if (!askData.query) {
+              throw new Error("Empty response from /api/ask");
+            }
+            setAnswer({
+              headline: askData.query.headline,
+              spoken: askData.query.spoken,
+              rows: askData.query.rows ?? [],
+              kind: askData.query.kind,
+            });
+            setMode("answer");
+            if (askData.query.spoken) synth.speak(askData.query.spoken);
+            return;
           }
 
           const res = await fetch("/api/voice-intent", {
@@ -206,6 +125,7 @@ export const VoiceSheet = forwardRef(
               categoryId: string | null;
               direction: "expense" | "income";
               transactedAt: string;
+              rawTranscript: string;
               confidence: number;
             };
             transaction?: Transaction;
@@ -308,7 +228,7 @@ export const VoiceSheet = forwardRef(
           } else if (result.confidence >= 0.7) {
             speech.stop();
             if (data.transaction) {
-              onSave(data.transaction);
+              onCreated?.(data.transaction);
             } else if (data.draft) {
               saveFromDraft(data.draft);
             }
