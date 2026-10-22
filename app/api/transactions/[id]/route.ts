@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server.js";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
-import {
-  deleteTransaction,
-  getTransaction,
-  updateTransaction,
-} from "@/lib/server/transactions";
+import { deleteTransaction, updateTransaction } from "@/lib/server/transactions";
 import { listCategoriesForUser } from "@/lib/server/categories";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
 import { getCurrentUserId } from "@/lib/server/user";
+import { isUuid } from "@/lib/server/ids";
+import { parseAmount } from "@/lib/server/transaction-input";
+import { serverError } from "@/lib/server/http";
 
 export const runtime = "nodejs";
 
@@ -48,10 +47,6 @@ interface PatchBody {
   direction?: "expense" | "income";
 }
 
-function isUuid(s: string): boolean {
-  return /^[0-9a-f-]{36}$/i.test(s);
-}
-
 export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -67,11 +62,17 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   const { id } = await ctx.params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   let raw: Record<string, unknown>;
   try {
     raw = (await req.json()) as Record<string, unknown>;
   } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
@@ -93,16 +94,17 @@ export async function PATCH(
 
   const body: PatchBody = {};
   if (raw.amount_minor !== undefined) {
-    if (typeof raw.amount_minor !== "number" || !(raw.amount_minor > 0)) {
+    const amount = parseAmount(raw.amount_minor);
+    if (amount === null) {
       return NextResponse.json(
         { error: "amount_minor must be a positive number" },
         { status: 400 },
       );
     }
-    body.amount_minor = raw.amount_minor;
+    body.amount_minor = amount;
   }
   if (raw.currency !== undefined) {
-    if (typeof raw.currency !== "string" || raw.currency.length !== 3) {
+    if (typeof raw.currency !== "string" || !/^[A-Za-z]{3}$/.test(raw.currency)) {
       return NextResponse.json(
         { error: "currency must be a 3-letter code" },
         { status: 400 },
@@ -111,7 +113,7 @@ export async function PATCH(
     body.currency = raw.currency.toUpperCase();
   }
   if (raw.merchant_raw !== undefined) {
-    const m = String(raw.merchant_raw ?? "").trim();
+    const m = String(raw.merchant_raw ?? "").trim().slice(0, 200);
     if (m.length === 0) {
       return NextResponse.json(
         { error: "merchant_raw is required" },
@@ -124,7 +126,7 @@ export async function PATCH(
     body.merchant_canonical =
       raw.merchant_canonical === null
         ? null
-        : String(raw.merchant_canonical ?? "").trim() || null;
+        : String(raw.merchant_canonical ?? "").trim().slice(0, 200) || null;
   }
   if (raw.category_id !== undefined) {
     if (raw.category_id === null) {
@@ -197,13 +199,12 @@ export async function PATCH(
         );
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error";
-      return NextResponse.json({ error: message }, { status: 500 });
+      return serverError(e, "transactions/PATCH categories");
     }
   }
 
   try {
-    const updated = await updateTransaction(id, body);
+    const updated = await updateTransaction(userId, id, body);
     if (!updated) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -212,8 +213,7 @@ export async function PATCH(
       transaction: toUiTransaction(updated, indexCategories(cats)),
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverError(e, "transactions/PATCH");
   }
 }
 
@@ -232,15 +232,16 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   const { id } = await ctx.params;
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   try {
-    const existing = await getTransaction(id);
-    if (!existing) {
+    const deleted = await deleteTransaction(userId, id);
+    if (!deleted) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    await deleteTransaction(id);
     return new NextResponse(null, { status: 204 });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverError(e, "transactions/DELETE");
   }
 }
