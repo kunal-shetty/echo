@@ -1,16 +1,28 @@
 /**
  * @file verify/route.ts
- * @description Handles OTP verification and user identity migration.
- * Validates the provided code against the stored hash and, if successful,
- * associates the user's email with their current device identity.
+ * @description Verifies an email OTP and signs the caller in.
  *
- * If the email is already associated with a different device, the route
- * performs a "migration" by updating all owned records to the new device ID.
+ * Outcomes, given a valid code for `email`:
+ *  - An account already owns the email → sign in to that account. If the
+ *    caller is currently a guest, the guest's own data is merged into it
+ *    first (the caller proves ownership of both: a live guest session and
+ *    the email code). Data never flows the other way.
+ *  - No account owns the email and the caller is a guest → the guest
+ *    account claims the email.
+ *  - Otherwise → a fresh verified account is created.
+ * The session id is always rotated on success.
  */
 
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server.js";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/server/supabase";
-import { getCurrentUserId } from "@/lib/server/user";
+import {
+  ensureDefaultAccount,
+  getSessionUser,
+  startSession,
+  toPublicUser,
+  type UserRow,
+} from "@/lib/server/user";
 import {
   bumpOtpAttempts,
   consumeOtp,
@@ -18,127 +30,128 @@ import {
   MAX_ATTEMPTS,
   verifyCodeHash,
 } from "@/lib/server/otp";
+import { serverError } from "@/lib/server/http";
+import { rateLimit } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
 
-/**
- * Tables that contain a `user_id` column and must be migrated
- * when a user claims their identity on a new device.
- */
-const TABLES_OWNED_BY_USER = [
-  "accounts",
-  "merchant_aliases",
-  "transactions",
-  "attachments",
-  "recurring_rules",
-  "budgets",
-  "voice_sessions",
-  "insights",
-];
-
-/**
- * Verifies the OTP and claims the identity.
- * Flow: Validate Code $\to$ Check Attempts $\to$ Resolve Identity $\to$ Migrate Data $\to$ Update User.
- */
 export async function POST(req: Request) {
+  const limited = rateLimit(req, "auth-verify", 30, 10 * 60 * 1000);
+  if (limited) return limited;
+
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
       { error: "Backend not configured.", code: "supabase_not_configured" },
       { status: 503 },
     );
   }
-  let body: { email?: string; code?: string };
+  let body: { email?: unknown; code?: unknown };
   try {
-    body = (await req.json()) as { email?: string; code?: string };
+    body = (await req.json()) as { email?: unknown; code?: unknown };
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  const email = body.email?.trim().toLowerCase();
-  const code = body.code?.trim();
+  const email =
+    typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const code = typeof body.code === "string" ? body.code.trim() : "";
   if (!email || !code) {
     return NextResponse.json(
       { error: "Email and code are required." },
       { status: 400 },
     );
   }
-
-  const deviceId = await getCurrentUserId();
-  if (!deviceId) {
-    return NextResponse.json(
-      { error: "No device identity found. Reload the page and try again." },
-      { status: 400 },
-    );
-  }
-
-  const otp = await findActiveOtp(email);
-  if (!otp) {
-    return NextResponse.json(
-      { error: "Code expired. Tap 'Resend code' to try again." },
-      { status: 400 },
-    );
-  }
-  if (otp.attempts >= MAX_ATTEMPTS) {
-    return NextResponse.json(
-      { error: "Too many attempts. Tap 'Resend code' to try again." },
-      { status: 429 },
-    );
-  }
-  if (!verifyCodeHash(code, otp.code_hash)) {
-    await bumpOtpAttempts(otp.id);
+  if (!/^\d{6}$/.test(code)) {
     return NextResponse.json({ error: "Wrong code." }, { status: 400 });
   }
 
-  // Valid code; remove it so it cannot be reused.
-  await consumeOtp(otp.id);
-
-  const supabase = getSupabaseAdmin();
-
-  // Check if this email is already linked to a different device identity.
-  const { data: existing } = await supabase
-    .from("users")
-    .select("id")
-    .eq("email", email)
-    .neq("id", deviceId)
-    .maybeSingle();
-
-  let migrated = false;
-  if (existing) {
-    const fromId = existing.id as string;
-    // Perform data migration: repoint all user-owned records to the current device ID.
-    for (const table of TABLES_OWNED_BY_USER) {
-      await supabase
-        .from(table)
-        .update({ user_id: deviceId })
-        .eq("user_id", fromId);
+  try {
+    const otp = await findActiveOtp(email);
+    if (!otp) {
+      return NextResponse.json(
+        { error: "Code expired. Tap 'Resend code' to try again." },
+        { status: 400 },
+      );
     }
-    // Delete the orphaned user record from the previous device.
-    await supabase.from("users").delete().eq("id", fromId);
-    migrated = true;
-  }
+    // Count the attempt before checking it, so parallel guesses can't
+    // exceed the limit.
+    const attempts = await bumpOtpAttempts(otp.id);
+    if (attempts > MAX_ATTEMPTS) {
+      return NextResponse.json(
+        { error: "Too many attempts. Tap 'Resend code' to try again." },
+        { status: 429 },
+      );
+    }
+    if (!verifyCodeHash(code, otp.code_hash)) {
+      return NextResponse.json({ error: "Wrong code." }, { status: 400 });
+    }
+    if (!(await consumeOtp(otp.id))) {
+      return NextResponse.json(
+        { error: "Code expired. Tap 'Resend code' to try again." },
+        { status: 400 },
+      );
+    }
 
-  // Finalize identity by updating the current device's user row with the verified email.
-  const { data: row, error } = await supabase
-    .from("users")
-    .upsert(
-      {
-        id: deviceId,
-        email,
-        email_verified_at: new Date().toISOString(),
-      },
-      { onConflict: "id" },
-    )
-    .select("*")
-    .single();
-  if (error) {
-    return NextResponse.json(
-      { error: `Could not save: ${error.message}` },
-      { status: 500 },
-    );
-  }
+    const supabase = getSupabaseAdmin();
+    const current = await getSessionUser();
+    const nowIso = new Date().toISOString();
 
-  return NextResponse.json({
-    verified: true,
-    migrated,
-    user: row,
-  });
+    const { data: owner, error: ownerErr } = await supabase
+      .from("users")
+      .select("id, email_verified_at")
+      .eq("email", email)
+      .maybeSingle();
+    if (ownerErr) throw ownerErr;
+
+    let userId: string;
+    let migrated = false;
+    if (owner) {
+      userId = owner.id as string;
+      if (current && !current.verified && current.userId !== userId) {
+        const { error } = await supabase.rpc("merge_user_data", {
+          from_uid: current.userId,
+          to_uid: userId,
+        });
+        if (error) throw error;
+        migrated = true;
+      }
+      if (!owner.email_verified_at) {
+        const { error } = await supabase
+          .from("users")
+          .update({ email_verified_at: nowIso })
+          .eq("id", userId);
+        if (error) throw error;
+      }
+    } else if (current && !current.verified) {
+      userId = current.userId;
+      const { error } = await supabase
+        .from("users")
+        .update({ email, email_verified_at: nowIso })
+        .eq("id", userId);
+      if (error) throw error;
+    } else {
+      userId = randomUUID();
+      const { error } = await supabase
+        .from("users")
+        .insert({ id: userId, email, email_verified_at: nowIso });
+      if (error) throw error;
+      await ensureDefaultAccount(userId);
+    }
+
+    await startSession(userId, true);
+
+    const { data: row, error: rowErr } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .single();
+    if (rowErr) throw rowErr;
+
+    return NextResponse.json({
+      verified: true,
+      migrated,
+      user: toPublicUser(row as UserRow),
+    });
+  } catch (e) {
+    return serverError(e, "auth/verify");
+  }
 }
