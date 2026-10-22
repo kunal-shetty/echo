@@ -357,6 +357,126 @@ end;
 $$;
 
 -- =====================================================================
+--  sessions
+--  Server-issued login sessions. The id is the opaque value stored in
+--  the httpOnly `echo_session` cookie. Guests get a session too; a guest
+--  is simply a users row whose email_verified_at is null.
+-- =====================================================================
+
+create table if not exists public.sessions (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references public.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+
+create index if not exists sessions_user_idx on public.sessions(user_id);
+
+-- =====================================================================
+--  increment_otp_attempts(otp_id)
+--  Atomically bumps the attempt counter and returns the new value, so
+--  concurrent guesses can't slip past MAX_ATTEMPTS.
+-- =====================================================================
+
+create or replace function public.increment_otp_attempts(otp_id uuid)
+returns int
+language sql
+security definer
+set search_path = public
+as $$
+  update public.email_otps
+     set attempts = attempts + 1
+   where id = otp_id
+  returning attempts;
+$$;
+
+-- =====================================================================
+--  merge_user_data(from_uid, to_uid)
+--  Moves everything a guest owns into a verified account, then deletes
+--  the guest. Runs as one transaction. Called from /api/auth/verify only
+--  after the caller has proven they own BOTH identities (a live session
+--  for from_uid and a valid email code for to_uid).
+-- =====================================================================
+
+create or replace function public.merge_user_data(from_uid uuid, to_uid uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  to_account uuid;
+begin
+  if from_uid = to_uid then
+    return;
+  end if;
+
+  perform public.ensure_default_account(to_uid);
+  select id into to_account
+    from public.accounts
+   where user_id = to_uid and is_default
+   limit 1;
+
+  -- Categories with the same name collapse onto the target's copy.
+  update public.transactions t set category_id = tc.id
+    from public.categories fc
+    join public.categories tc on tc.user_id = to_uid and tc.name = fc.name
+   where fc.user_id = from_uid and t.category_id = fc.id;
+  update public.merchant_aliases a set category_id = tc.id
+    from public.categories fc
+    join public.categories tc on tc.user_id = to_uid and tc.name = fc.name
+   where fc.user_id = from_uid and a.category_id = fc.id;
+  update public.recurring_rules r set category_id = tc.id
+    from public.categories fc
+    join public.categories tc on tc.user_id = to_uid and tc.name = fc.name
+   where fc.user_id = from_uid and r.category_id = fc.id;
+  delete from public.categories fc
+   using public.categories tc
+   where fc.user_id = from_uid and tc.user_id = to_uid and tc.name = fc.name;
+  update public.categories set user_id = to_uid where user_id = from_uid;
+
+  -- Money rows land on the target's default account.
+  update public.transactions
+     set user_id = to_uid, account_id = to_account
+   where user_id = from_uid;
+  update public.recurring_rules
+     set user_id = to_uid, account_id = to_account
+   where user_id = from_uid;
+
+  -- Aliases and budgets: the target's existing rows win on conflict.
+  delete from public.merchant_aliases fa
+   using public.merchant_aliases ta
+   where fa.user_id = from_uid and ta.user_id = to_uid and ta.alias = fa.alias;
+  update public.merchant_aliases set user_id = to_uid where user_id = from_uid;
+  delete from public.budgets fb
+   using public.budgets tb
+   where fb.user_id = from_uid and tb.user_id = to_uid
+     and tb.category_id = fb.category_id and tb.period_start = fb.period_start;
+  update public.budgets set user_id = to_uid where user_id = from_uid;
+
+  update public.voice_sessions set user_id = to_uid where user_id = from_uid;
+  -- Insights are derived data; the target regenerates them.
+  delete from public.insights where user_id = from_uid;
+
+  -- Cascades the guest's accounts and sessions.
+  delete from public.users where id = from_uid;
+end;
+$$;
+
+-- Supabase grants EXECUTE on public functions to anon/authenticated by
+-- default. These must only be reachable with the service_role key.
+revoke execute on function public.ensure_default_account(uuid) from public, anon, authenticated;
+revoke execute on function public.increment_otp_attempts(uuid) from public, anon, authenticated;
+revoke execute on function public.merge_user_data(uuid, uuid)  from public, anon, authenticated;
+grant  execute on function public.ensure_default_account(uuid) to service_role;
+grant  execute on function public.increment_otp_attempts(uuid) to service_role;
+grant  execute on function public.merge_user_data(uuid, uuid)  to service_role;
+
+-- An earlier /api/admin/setup-schema route relied on an `exec_sql(sql)`
+-- RPC. Arbitrary-SQL functions must never be exposed; drop it if present.
+drop function if exists public.exec_sql(text);
+
+-- =====================================================================
 --  Row-Level Security
 -- =====================================================================
 
@@ -369,6 +489,8 @@ alter table public.recurring_rules enable row level security;
 alter table public.budgets         enable row level security;
 alter table public.voice_sessions  enable row level security;
 alter table public.insights        enable row level security;
+alter table public.email_otps      enable row level security;
+alter table public.sessions        enable row level security;
 -- categories is special: system rows are publicly readable.
 alter table public.categories      enable row level security;
 
@@ -450,6 +572,12 @@ create policy insights_deny on public.insights
 -- email_otps — only writable by service_role via /api routes
 drop policy if exists email_otps_deny on public.email_otps;
 create policy email_otps_deny on public.email_otps
+  for all to anon, authenticated
+  using (false) with check (false);
+
+-- sessions — only readable/writable by service_role via /api routes
+drop policy if exists sessions_deny on public.sessions;
+create policy sessions_deny on public.sessions
   for all to anon, authenticated
   using (false) with check (false);
 
