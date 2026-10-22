@@ -1,8 +1,10 @@
 import { getSupabaseAdmin } from "@/lib/server/supabase";
-import { getCurrentUserId } from "@/lib/server/user";
 
 // DB row mirrors schema.sql `public.transactions`. We map it to the UI
 // shape in `lib/transaction-shape.ts` before sending to the client.
+//
+// Every function takes the caller's userId explicitly; routes resolve it
+// from the session (see lib/server/user.ts) and every query is scoped by it.
 
 export interface DbTransaction {
   id: string;
@@ -25,9 +27,14 @@ export interface DbTransaction {
 
 export type TransactionInsert = Omit<DbTransaction, "id" | "user_id" | "created_at">;
 
-export async function listTransactions(limit = 100): Promise<DbTransaction[]> {
-  const userId = await getCurrentUserId();
-  if (!userId) return [];
+export type TransactionPatch = Partial<
+  Omit<DbTransaction, "id" | "user_id" | "created_at" | "account_id" | "source">
+>;
+
+export async function listTransactions(
+  userId: string,
+  limit = 100,
+): Promise<DbTransaction[]> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("transactions")
@@ -41,10 +48,9 @@ export async function listTransactions(limit = 100): Promise<DbTransaction[]> {
 }
 
 export async function createTransaction(
+  userId: string,
   patch: TransactionInsert,
 ): Promise<DbTransaction> {
-  const userId = await getCurrentUserId();
-  if (!userId) throw new Error("No device identity; reload the page.");
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("transactions")
@@ -55,34 +61,35 @@ export async function createTransaction(
   return data as DbTransaction;
 }
 
-export async function deleteTransaction(id: string): Promise<void> {
-  const userId = await getCurrentUserId();
-  if (!userId) return;
+/** Soft-deletes a transaction. @returns True if a row was deleted. */
+export async function deleteTransaction(
+  userId: string,
+  id: string,
+): Promise<boolean> {
   const supabase = getSupabaseAdmin();
-  await supabase
+  const { data, error } = await supabase
     .from("transactions")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .select("id");
+  if (error) throw error;
+  return (data ?? []).length > 0;
 }
 
 export async function updateTransaction(
+  userId: string,
   id: string,
-  patch: Partial<
-    Omit<
-      DbTransaction,
-      "id" | "user_id" | "created_at" | "deleted_at"
-    >
-  >,
+  patch: TransactionPatch,
 ): Promise<DbTransaction | null> {
-  const userId = await getCurrentUserId();
-  if (!userId) return null;
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("transactions")
     .update({ ...patch, clarified: true })
     .eq("id", id)
     .eq("user_id", userId)
+    .is("deleted_at", null)
     .select("*")
     .maybeSingle();
   if (error) throw error;
@@ -90,10 +97,9 @@ export async function updateTransaction(
 }
 
 export async function getTransaction(
+  userId: string,
   id: string,
 ): Promise<DbTransaction | null> {
-  const userId = await getCurrentUserId();
-  if (!userId) return null;
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("transactions")
