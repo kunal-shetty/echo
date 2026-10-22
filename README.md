@@ -72,11 +72,25 @@ Echo uses a sophisticated **2-Layer Processing Pipeline** to balance speed and i
 3. Set up your `.env` file:
    ```env
    GROQ_API_KEY=your_groq_key
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+   SUPABASE_URL=your_supabase_url
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key   # server-only; never expose
+   OTP_PEPPER=a_long_random_secret                    # required in production
+   RESEND_API_KEY=your_resend_key                     # optional: email sync
+   RESEND_FROM="Echo <codes@yourdomain.com>"          # optional: email sync
    ```
-4. Run the development server:
+4. Apply the database schema (idempotent; re-run after pulling changes):
+   ```bash
+   psql "$SUPABASE_DB_URL" -f schema.sql
+   ```
+   or paste `schema.sql` into the Supabase SQL Editor.
+5. Run the development server:
    ```bash
    npm run dev
    ```
+
+### Testing
+```bash
+npm test                  # unit + API route tests (Vitest)
+npx playwright install    # once, to download browsers
+npm run test:e2e          # end-to-end tests; starts `next dev` automatically
+```
