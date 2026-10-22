@@ -108,7 +108,7 @@ export function useCategories(): CategoriesState {
           setError(json.error ?? `Create failed (${res.status})`);
           return null;
         }
-        setCategories((prev) => [...json.category!, ...prev]);
+        setCategories((prev) => [json.category!, ...prev]);
         return json.category;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Network error");
