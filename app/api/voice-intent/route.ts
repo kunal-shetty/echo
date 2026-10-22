@@ -4,30 +4,51 @@
  * This is the core of the "Voice-to-Action" pipeline. It takes a transcript,
  * uses the LLM to parse it into an intent (Create, Update, Delete, Query),
  * and then executes the corresponding database operation.
+ *
+ * Everything the LLM returns is treated as untrusted input: ids must be
+ * uuids owned by the caller, amounts and dates are re-validated, and every
+ * query is scoped to the session's user.
  */
 
 import { NextResponse } from "next/server.js";
-import { isSupabaseConfigured, getSupabaseAdmin } from "@/lib/server/supabase";
+import { isSupabaseConfigured } from "@/lib/server/supabase";
 import {
   createTransaction,
   deleteTransaction,
   getTransaction,
   listTransactions,
   updateTransaction,
+  type TransactionPatch,
 } from "@/lib/server/transactions";
-import { listSystemCategories, createCategory } from "@/lib/server/categories";
-import { resolveMerchant } from "@/lib/server/merchant-aliases";
+import {
+  createCategory,
+  listCategoriesForUser,
+  type DbCategory,
+} from "@/lib/server/categories";
+import { resolveMerchant, upsertAlias } from "@/lib/server/merchant-aliases";
 import { parseTranscript } from "@/lib/groq";
 import type { ParseResult } from "@/lib/parse";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
 import type { Transaction } from "@/lib/schema";
-import { getCurrentUserId } from "@/lib/server/user";
-import { upsertAlias } from "@/lib/server/merchant-aliases";
+import { requireUserId } from "@/lib/server/user";
+import { isUuid } from "@/lib/server/ids";
+import { loadTxContext, parseAmount, parseDate } from "@/lib/server/transaction-input";
+import { serverError } from "@/lib/server/http";
+import { rateLimit } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
 
+/** Longest transcript we will send to the LLM. */
+const MAX_TRANSCRIPT = 1000;
+/**
+ * Creates at or above this confidence are saved immediately. Below it the
+ * route only returns a draft, and the client saves once the user confirms
+ * (matches the voice sheet's own threshold).
+ */
+const AUTO_SAVE_CONFIDENCE = 0.7;
+
 interface IntentBody {
-  transcript?: string;
+  transcript?: unknown;
 }
 
 interface IntentResponse {
@@ -64,20 +85,28 @@ function pickCategoryId(
 }
 
 /**
- * Resolves the default account ID for a given user.
- * Used to assign transactions when the user doesn't specify an account.
- * @param userId The UUID of the user.
- * @returns The default account ID or null if none is configured.
+ * Finds the user's category for an LLM-supplied name, creating a custom
+ * category if none matches. Newly created categories are appended to
+ * `categories` so later lookups in this request see them.
  */
-async function defaultAccountId(userId: string): Promise<string | null> {
-  const supabase = getSupabaseAdmin();
-  const { data } = await supabase
-    .from("accounts")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("is_default", true)
-    .maybeSingle();
-  return (data?.id as string | undefined) ?? null;
+async function resolveCategoryId(
+  userId: string,
+  name: string | null,
+  categories: DbCategory[],
+): Promise<string | null> {
+  if (!name) return null;
+  const existing = pickCategoryId(name, categories);
+  if (existing) return existing;
+  const trimmed = name.trim().slice(0, 40);
+  if (!trimmed) return null;
+  try {
+    const created = await createCategory(userId, { name: trimmed, tone: "neutral" });
+    categories.push(created);
+    return created.id;
+  } catch (e) {
+    console.error("[voice-intent] failed to auto-create category", e);
+    return null;
+  }
 }
 
 /**
@@ -87,6 +116,9 @@ async function defaultAccountId(userId: string): Promise<string | null> {
  * Returns a detailed response including the resulting transaction if applicable.
  */
 export async function POST(req: Request) {
+  const limited = rateLimit(req, "llm", 30, 60 * 1000);
+  if (limited) return limited;
+
   let body: IntentBody;
   try {
     body = (await req.json()) as IntentBody;
@@ -94,21 +126,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const transcript = body.transcript?.trim();
+  const transcript =
+    typeof body?.transcript === "string" ? body.transcript.trim() : "";
   if (!transcript) {
     return NextResponse.json(
       { error: "Missing 'transcript' field" },
       { status: 400 },
     );
   }
+  if (transcript.length > MAX_TRANSCRIPT) {
+    return NextResponse.json({ error: "Transcript too long" }, { status: 400 });
+  }
 
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      {
-        error:
-          "GROQ_API_KEY is not set. Add it to your .env to enable voice intent.",
-      },
+      { error: "Voice input isn't configured on this deployment." },
       { status: 503 },
     );
   }
@@ -120,9 +153,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const userId = await getCurrentUserId();
-  if (!userId) {
-    return NextResponse.json({ error: "No device identity." }, { status: 400 });
+  let userId: string;
+  try {
+    userId = await requireUserId();
+  } catch (e) {
+    return serverError(e, "voice-intent");
   }
 
   // Recent transactions for parser context (last 5).
@@ -133,7 +168,7 @@ export async function POST(req: Request) {
     amount: number;
   }> = [];
   try {
-    const rows = await listTransactions(5);
+    const rows = await listTransactions(userId, 5);
     recent = rows.map((r) => ({
       id: r.id,
       transactedAt: r.transacted_at,
@@ -148,114 +183,114 @@ export async function POST(req: Request) {
   try {
     parsed = await parseTranscript(transcript, apiKey, { recent });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Parse failed";
-    return NextResponse.json({ error: message }, { status: 502 });
+    console.error("[voice-intent] parse failed", e);
+    return NextResponse.json(
+      { error: "Couldn't understand that. Please try again." },
+      { status: 502 },
+    );
   }
-
-  const sysCats = await listSystemCategories().catch(() => []);
-  const indexed = indexCategories(sysCats);
 
   const response: IntentResponse = { result: parsed };
 
   try {
+    const categories = await listCategoriesForUser(userId);
+
     if (parsed.action === "update") {
       const id = parsed.matchId;
-      if (!id) {
+      if (!isUuid(id)) {
         response.warning =
           "I couldn't match that to a recent expense. Could you be more specific?";
         return NextResponse.json(response);
       }
-      const target = await getTransaction(id);
+      const target = await getTransaction(userId, id);
       if (!target) {
         response.warning = "That expense isn't on file anymore.";
         return NextResponse.json(response);
       }
 
-      const patch: Parameters<typeof updateTransaction>[1] = {};
-      if (parsed.newAmount != null) patch.amount_minor = parsed.newAmount;
+      const patch: TransactionPatch = {};
+      const newAmount = parseAmount(parsed.newAmount);
+      if (newAmount !== null) patch.amount_minor = newAmount;
       if (parsed.newMerchant) {
-        const resolved = await resolveMerchant(parsed.newMerchant);
-        patch.merchant_raw = parsed.newMerchant;
+        const newMerchant = parsed.newMerchant.slice(0, 200);
+        const resolved = await resolveMerchant(userId, newMerchant);
+        patch.merchant_raw = newMerchant;
         patch.merchant_canonical = resolved.canonical;
       }
-      if (parsed.newTransactedAt) patch.transacted_at = parsed.newTransactedAt;
+      const newDate = parseDate(parsed.newTransactedAt);
+      if (newDate) patch.transacted_at = newDate;
       if (parsed.direction) patch.direction = parsed.direction;
-      if (parsed.category) {
-        let catId = pickCategoryId(parsed.category, sysCats);
-        if (!catId) {
-          try {
-            const newCat = await createCategory(userId, {
-              name: parsed.category,
-              tone: "neutral",
-            });
-            catId = newCat.id;
-          } catch (e) {
-            console.error("Failed to auto-create category during update", e);
-          }
-        }
-        if (catId) patch.category_id = catId;
-      }
+      const catId = await resolveCategoryId(userId, parsed.category, categories);
+      if (catId) patch.category_id = catId;
 
-      const updated = await updateTransaction(id, patch);
+      if (Object.keys(patch).length === 0) {
+        response.warning = "I couldn't tell what to change. Could you say it again?";
+        return NextResponse.json(response);
+      }
+      const updated = await updateTransaction(userId, id, patch);
       if (!updated) {
         response.warning = "Couldn't update that expense.";
         return NextResponse.json(response);
       }
-      response.transaction = toUiTransaction(updated, indexed);
+      response.transaction = toUiTransaction(updated, indexCategories(categories));
       return NextResponse.json(response);
     }
 
     if (parsed.action === "delete") {
       const id = parsed.matchId;
-      if (!id) {
+      if (!isUuid(id)) {
         response.warning =
           "I couldn't match that to a recent expense. Which one did you mean?";
         return NextResponse.json(response);
       }
-      const target = await getTransaction(id);
-      if (!target) {
+      if (!(await deleteTransaction(userId, id))) {
         response.warning = "That expense isn't on file anymore.";
         return NextResponse.json(response);
       }
-      await deleteTransaction(id);
       response.deletedId = id;
       return NextResponse.json(response);
     }
 
     // action === "create"
-    if (parsed.amount == null || !parsed.merchant) {
+    const amount = parseAmount(parsed.amount);
+    const merchant = parsed.merchant?.slice(0, 200) ?? null;
+    if (amount === null || !merchant) {
       response.warning =
         "I couldn't pin down the amount or merchant. Please try again or type it in.";
       return NextResponse.json(response);
     }
 
-    const accountId = await defaultAccountId(userId);
-
-    const resolved = await resolveMerchant(parsed.merchant);
+    const resolved = await resolveMerchant(userId, merchant);
     const merchantCanonical = resolved.canonical;
 
-    let categoryId =
-      pickCategoryId(parsed.category, sysCats) ??
+    const autoSave = parsed.confidence >= AUTO_SAVE_CONFIDENCE;
+    const categoryId =
+      pickCategoryId(parsed.category, categories) ??
       resolved.alias?.category_id ??
-      null;
+      // Only invent a new category for rows we're actually saving.
+      (autoSave
+        ? await resolveCategoryId(userId, parsed.category, categories)
+        : null);
+    const transactedAt = parseDate(parsed.transactedAt) ?? new Date().toISOString();
 
-    if (!categoryId && parsed.category) {
-      try {
-        const newCat = await createCategory(userId, {
-          name: parsed.category,
-          tone: "neutral",
-        });
-        categoryId = newCat.id;
-      } catch (e) {
-        console.error("Failed to auto-create category during create", e);
-      }
+    response.draft = {
+      amount,
+      merchant,
+      categoryId,
+      direction: parsed.direction ?? "expense",
+      transactedAt,
+      rawTranscript: transcript,
+      confidence: parsed.confidence,
+    };
+    if (!autoSave) {
+      return NextResponse.json(response);
     }
 
     // If we just discovered a new merchant, persist it as a fresh alias so
     // future utterances that mis-hear the same name will fuzzy-match it.
     if (resolved.createdNew) {
-      await upsertAlias({
-        alias: parsed.merchant,
+      await upsertAlias(userId, {
+        alias: merchant,
         canonical: merchantCanonical,
         categoryId,
       }).catch(() => {
@@ -263,44 +298,26 @@ export async function POST(req: Request) {
       });
     }
 
-    const transactedAt = parsed.transactedAt ?? new Date().toISOString();
-
-    let row = null;
-    if (accountId) {
-      row = await createTransaction({
-        account_id: accountId,
-        category_id: categoryId,
-        amount_minor: parsed.amount,
-        currency: "INR",
-        direction: parsed.direction ?? "expense",
-        merchant_raw: parsed.merchant,
-        merchant_canonical: merchantCanonical,
-        note: null,
-        source: "voice",
-        confidence: parsed.confidence,
-        raw_transcript: transcript,
-        transacted_at: transactedAt,
-        clarified: false,
-      });
-    }
-
-    response.draft = {
-      amount: parsed.amount,
-      merchant: parsed.merchant,
-      categoryId,
+    const ctx = await loadTxContext(userId);
+    const row = await createTransaction(userId, {
+      account_id: ctx.accountId,
+      category_id: categoryId,
+      amount_minor: amount,
+      currency: ctx.homeCurrency,
       direction: parsed.direction ?? "expense",
-      transactedAt,
-      rawTranscript: transcript,
+      merchant_raw: merchant,
+      merchant_canonical: merchantCanonical,
+      note: null,
+      source: "voice",
       confidence: parsed.confidence,
-    };
-    if (row) {
-      response.transaction = toUiTransaction(row, indexed);
-    } else {
-      response.warning = "No default account found. Saving to local storage.";
-    }
+      raw_transcript: transcript,
+      transacted_at: transactedAt,
+      clarified: false,
+    });
+
+    response.transaction = toUiTransaction(row, indexCategories(categories));
     return NextResponse.json(response);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Intent failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverError(e, "voice-intent");
   }
 }
