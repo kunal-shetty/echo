@@ -6,6 +6,7 @@
  */
 
 import { NextResponse } from "next/server.js";
+import { rateLimit } from "@/lib/server/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,8 @@ const GROQ_TRANSCRIBE_URL =
   "https://api.groq.com/openai/v1/audio/transcriptions";
 const WHISPER_MODEL =
   process.env.GROQ_WHISPER_MODEL ?? "whisper-large-v3-turbo";
+/** Voice notes are short; anything bigger is not a voice note. */
+const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
 /**
  * POST /api/transcribe
@@ -21,6 +24,14 @@ const WHISPER_MODEL =
  * Forwards the file to Groq's Whisper API and returns the transcription.
  */
 export async function POST(req: Request) {
+  const limited = rateLimit(req, "llm", 30, 60 * 1000);
+  if (limited) return limited;
+
+  const declared = Number(req.headers.get("content-length") ?? 0);
+  if (declared > MAX_AUDIO_BYTES + 64 * 1024) {
+    return NextResponse.json({ error: "Audio too large" }, { status: 413 });
+  }
+
   let form: FormData;
   try {
     form = await req.formData();
@@ -39,12 +50,18 @@ export async function POST(req: Request) {
     );
   }
 
+  if (file.size === 0 || file.size > MAX_AUDIO_BYTES) {
+    return NextResponse.json({ error: "Audio too large" }, { status: 413 });
+  }
+  if (file.type && !file.type.startsWith("audio/") && file.type !== "video/webm") {
+    return NextResponse.json({ error: "Expected an audio file" }, { status: 415 });
+  }
+
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
       {
-        error:
-          "GROQ_API_KEY is not set. Add it to your .env to enable transcription.",
+        error: "Transcription isn't configured on this deployment.",
       },
       { status: 503 },
     );
@@ -52,7 +69,8 @@ export async function POST(req: Request) {
 
   // Forward to Groq. Whisper accepts webm/opus, mp4, wav, m4a, etc.
   // Language hint improves accuracy for en-IN users on short utterances.
-  const language = (form.get("language") ?? "en").toString();
+  const requested = (form.get("language") ?? "en").toString();
+  const language = /^[a-z]{2}$/.test(requested) ? requested : "en";
   const upstream = new FormData();
   upstream.append("file", file, file.name || "audio.webm");
   upstream.append("model", WHISPER_MODEL);
@@ -68,16 +86,14 @@ export async function POST(req: Request) {
       body: upstream,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Upstream fetch failed";
-    return NextResponse.json({ error: message }, { status: 502 });
+    console.error("[transcribe] upstream fetch failed", e);
+    return NextResponse.json({ error: "Transcription failed" }, { status: 502 });
   }
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    return NextResponse.json(
-      { error: `Groq ${res.status}: ${detail.slice(0, 240)}` },
-      { status: 502 },
-    );
+    console.error(`[transcribe] Groq ${res.status}: ${detail.slice(0, 500)}`);
+    return NextResponse.json({ error: "Transcription failed" }, { status: 502 });
   }
 
   const json = (await res.json()) as { text?: string };
