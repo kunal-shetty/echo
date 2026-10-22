@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppContextProvider } from "@/context/AppContext";
 import { OnboardingWrapper } from "@/components/onboarding-wrapper";
 import { AppShell } from "@/components/echo-shell";
+import { TransactionsProvider } from "@/lib/use-transactions";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
 const geistMono = Geist_Mono({
@@ -15,7 +16,6 @@ export const metadata: Metadata = {
   title: "Echo — Your money, in the moment",
   description:
     "A calm, intelligent space for understanding your everyday spending.",
-  generator: "v0.app",
   icons: {
     icon: [
       {
@@ -52,9 +52,11 @@ export default function RootLayout({
     <html lang="en" className="bg-background">
       <body className={`${geist.variable} ${geistMono.variable} antialiased`}>
         <AppContextProvider>
-          <OnboardingWrapper>
-            <AppShell>{children}</AppShell>
-          </OnboardingWrapper>
+          <TransactionsProvider>
+            <OnboardingWrapper>
+              <AppShell>{children}</AppShell>
+            </OnboardingWrapper>
+          </TransactionsProvider>
         </AppContextProvider>
       </body>
     </html>
