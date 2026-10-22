@@ -6,20 +6,24 @@
  */
 
 import { NextResponse } from "next/server.js";
-import { isSupabaseConfigured } from "@/lib/server/supabase";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/server/supabase";
 import { parseTranscript, generateReasonedResponse } from "@/lib/groq";
 import { runQuery, type QueryFilters } from "@/lib/server/queries";
+import { requireUserId } from "@/lib/server/user";
+import { serverError } from "@/lib/server/http";
+import { rateLimit } from "@/lib/server/rate-limit";
 import type { ParseResult, QueryKind, QueryRange } from "@/lib/parse";
 import { defaultKindForQuery, defaultDirectionForQuery } from "@/lib/parse";
 
 export const runtime = "nodejs";
 
+/** Longest transcript we will send to the LLM. */
+const MAX_TRANSCRIPT = 1000;
+
 interface AskBody {
-  transcript?: string;
-  sessionId?: string;
-  parseOnly?: boolean;
-  respondOnly?: boolean;
-  result?: any; // for respondOnly
+  transcript?: unknown;
+  /** Client-generated id grouping one voice conversation. */
+  sessionId?: unknown;
 }
 
 interface AskResponse {
@@ -44,6 +48,9 @@ interface AskResponse {
  * a conversational answer based on real transaction data.
  */
 export async function POST(req: Request) {
+  const limited = rateLimit(req, "llm", 30, 60 * 1000);
+  if (limited) return limited;
+
   let body: AskBody;
   try {
     body = (await req.json()) as AskBody;
@@ -54,45 +61,26 @@ export async function POST(req: Request) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      {
-        error:
-          "GROQ_API_KEY is not set. Add it to your .env to enable voice queries.",
-      },
+      { error: "Voice queries aren't configured on this deployment." },
       { status: 503 },
     );
   }
 
-  if (body.respondOnly) {
-    const transcript = body.transcript?.trim();
-    if (!transcript || !body.result) {
-      return NextResponse.json(
-        { error: "Missing transcript or result" },
-        { status: 400 },
-      );
-    }
-    try {
-      const reasonedSpoken = await generateReasonedResponse(
-        transcript,
-        body.result,
-        [],
-        apiKey,
-      );
-      return NextResponse.json({ spoken: reasonedSpoken });
-    } catch (e) {
-      return NextResponse.json(
-        { error: "Response generation failed" },
-        { status: 500 },
-      );
-    }
-  }
-
-  const transcript = body.transcript?.trim();
+  const transcript =
+    typeof body?.transcript === "string" ? body.transcript.trim() : "";
   if (!transcript) {
     return NextResponse.json(
       { error: "Missing 'transcript' field" },
       { status: 400 },
     );
   }
+  if (transcript.length > MAX_TRANSCRIPT) {
+    return NextResponse.json({ error: "Transcript too long" }, { status: 400 });
+  }
+  const voiceSessionId =
+    typeof body.sessionId === "string" && /^[A-Za-z0-9-]{1,64}$/.test(body.sessionId)
+      ? body.sessionId
+      : null;
 
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
@@ -101,20 +89,16 @@ export async function POST(req: Request) {
     );
   }
 
-  const { getCurrentUserId } = await import("@/lib/server/user");
-  const userId = await getCurrentUserId();
-
   // Parse.
   let parsed: ParseResult;
   try {
     parsed = await parseTranscript(transcript, apiKey);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Parse failed";
-    return NextResponse.json({ error: message }, { status: 502 });
-  }
-
-  if (body.parseOnly) {
-    return NextResponse.json({ result: parsed });
+    console.error("[ask] parse failed", e);
+    return NextResponse.json(
+      { error: "Couldn't understand that. Please try again." },
+      { status: 502 },
+    );
   }
 
   // If the parser said something else (e.g. "create"), still try to answer
@@ -135,21 +119,21 @@ export async function POST(req: Request) {
   };
 
   try {
-    const result = await runQuery(filters);
+    const userId = await requireUserId();
+    const result = await runQuery(userId, filters);
+    const supabase = getSupabaseAdmin();
 
-    // Fetch conversation history for this session to provide context to Groq.
-    let history: any[] = [];
-    if (body.sessionId) {
-      const { getSupabaseAdmin } = await import("@/lib/server/supabase");
-      const supabase = getSupabaseAdmin();
+    // Fetch conversation history for this voice session to give Groq context.
+    let history: unknown[] = [];
+    if (voiceSessionId) {
       const { data: sessions } = await supabase
         .from("voice_sessions")
         .select("transcript, parsed_intent")
         .eq("user_id", userId)
-        .eq("device", body.sessionId)
-        .order("started_at", { ascending: true })
+        .eq("device", voiceSessionId)
+        .order("started_at", { ascending: false })
         .limit(5);
-      if (sessions) history = sessions;
+      if (sessions) history = sessions.reverse();
     }
 
     const reasonedSpoken = await generateReasonedResponse(
@@ -172,16 +156,14 @@ export async function POST(req: Request) {
       },
     };
 
-    if (body.sessionId) {
-      const { getSupabaseAdmin } = await import("@/lib/server/supabase");
-      const supabase = getSupabaseAdmin();
+    if (voiceSessionId) {
       await supabase.from("voice_sessions").insert({
         user_id: userId,
         started_at: new Date().toISOString(),
         transcript,
         parsed_intent: parsed,
         outcome: "created",
-        device: body.sessionId,
+        device: voiceSessionId,
       });
     }
 
@@ -191,7 +173,6 @@ export async function POST(req: Request) {
     }
     return NextResponse.json(response);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Query failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverError(e, "ask");
   }
 }
