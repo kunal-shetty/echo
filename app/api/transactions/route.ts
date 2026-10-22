@@ -7,61 +7,49 @@
 
 import { NextResponse } from "next/server.js";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
-import {
-  createTransaction,
-  listTransactions,
-  type TransactionInsert,
-} from "@/lib/server/transactions";
-import { listSystemCategories } from "@/lib/server/categories";
+import { createTransaction, listTransactions } from "@/lib/server/transactions";
+import { listCategoriesForUser } from "@/lib/server/categories";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
-import { getCurrentUserId } from "@/lib/server/user";
-import { getSupabaseAdmin } from "@/lib/server/supabase";
+import { getCurrentUserId, requireUserId } from "@/lib/server/user";
+import { loadTxContext, validateTransactionInput } from "@/lib/server/transaction-input";
+import { serverError } from "@/lib/server/http";
 
 export const runtime = "nodejs";
 
 /**
  * GET /api/transactions
- * Retrieves all transactions for the current user, along with the
- * available categories for UI resolution.
+ * Retrieves the current user's transactions. A request with no session
+ * simply has no transactions yet.
  */
 export async function GET() {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({
-      transactions: [],
-      categories: [],
-      configured: false,
-    });
+    return NextResponse.json({ transactions: [], configured: false });
   }
   try {
     const userId = await getCurrentUserId();
     if (!userId) {
-      return NextResponse.json({
-        transactions: [],
-        categories: [],
-        configured: false,
-      });
+      return NextResponse.json({ transactions: [], configured: true });
     }
 
     const [rows, cats] = await Promise.all([
-      listTransactions(userId),
-      listSystemCategories(),
+      listTransactions(userId, 500),
+      listCategoriesForUser(userId),
     ]);
     const indexed = indexCategories(cats);
     return NextResponse.json({
       transactions: rows.map((r) => toUiTransaction(r, indexed)),
-      categories: cats,
       configured: true,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverError(e, "transactions/GET");
   }
 }
 
 /**
  * POST /api/transactions
- * Manually creates a new transaction.
- * Validates amount and merchant before resolving the account and persisting to DB.
+ * Manually creates a new transaction for the current user (creating a
+ * guest account on first use). The account is always the user's default;
+ * every other field is validated server-side.
  */
 export async function POST(req: Request) {
   if (!isSupabaseConfigured()) {
@@ -70,74 +58,33 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  let body: TransactionInsert;
+  let body: Record<string, unknown>;
   try {
-    body = (await req.json()) as TransactionInsert;
+    body = (await req.json()) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  const amount = Number(body.amount_minor ?? 0);
-  if (!(amount > 0)) {
-    return NextResponse.json({ error: "Amount must be > 0" }, { status: 400 });
-  }
-  const merchant = body.merchant_raw?.trim();
-  if (!merchant) {
-    return NextResponse.json(
-      { error: "Merchant is required" },
-      { status: 400 },
-    );
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   try {
-    const userId = await getCurrentUserId();
-    if (!userId) {
-      return NextResponse.json(
-        { error: "No device identity." },
-        { status: 400 },
-      );
-    }
-
-    const supabase = getSupabaseAdmin();
-
-    let accountId = body.account_id;
-    if (!accountId) {
-      const { data: def } = await supabase
-        .from("accounts")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("is_default", true)
-        .maybeSingle();
-      accountId = (def?.id as string | undefined) ?? null;
-    }
-    if (!accountId) {
-      return NextResponse.json(
-        { error: "No account found for user." },
-        { status: 500 },
-      );
-    }
-
-    const row = await createTransaction({
-      account_id: accountId,
-      category_id: body.category_id ?? null,
-      amount_minor: amount,
-      currency: (body.currency ?? "INR").slice(0, 3).toUpperCase(),
-      direction: body.direction ?? "expense",
-      merchant_raw: merchant,
-      merchant_canonical: body.merchant_canonical ?? merchant,
-      note: body.note ?? null,
-      source: body.source ?? "manual",
-      confidence: body.confidence ?? null,
-      raw_transcript: body.raw_transcript ?? null,
-      transacted_at: body.transacted_at ?? new Date().toISOString(),
-      clarified: false,
+    const userId = await requireUserId();
+    const ctx = await loadTxContext(userId);
+    const result = validateTransactionInput(body, ctx, {
+      allowedSources: ["manual", "voice"],
+      defaultSource: "manual",
     });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
 
-    const cats = await listSystemCategories();
+    const row = await createTransaction(userId, result.row);
+    const cats = await listCategoriesForUser(userId);
     return NextResponse.json({
       transaction: toUiTransaction(row, indexCategories(cats)),
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverError(e, "transactions/POST");
   }
 }
