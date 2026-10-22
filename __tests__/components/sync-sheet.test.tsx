@@ -12,6 +12,11 @@ vi.mock('@/lib/use-remote-user', () => {
   };
 });
 
+const refreshTransactions = vi.fn();
+vi.mock('@/lib/use-transactions', () => ({
+  useTransactions: () => ({ refresh: refreshTransactions }),
+}));
+
 // Mock BottomSheet to just render children
 vi.mock('@/components/ui/bottom-sheet', () => ({
   BottomSheet: ({ children, open }: any) => open ? <div>{children}</div> : null,
@@ -142,7 +147,9 @@ describe('SyncSheet', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/merged data from another device/i)).toBeInTheDocument();
+      expect(screen.getByText(/added to your existing account/i)).toBeInTheDocument();
+      // The session now points at the merged account, so the list reloads.
+      expect(refreshTransactions).toHaveBeenCalled();
     });
   });
 });
