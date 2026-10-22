@@ -6,6 +6,7 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/server/supabase";
+import { isUuid } from "@/lib/server/ids";
 
 /** Database representation of a category. */
 export interface DbCategory {
@@ -44,6 +45,9 @@ export async function listSystemCategories(): Promise<DbCategory[]> {
 export async function listCategoriesForUser(
   userId: string,
 ): Promise<DbCategory[]> {
+  // userId is interpolated into a filter string below; refuse anything
+  // that isn't a plain uuid.
+  if (!isUuid(userId)) throw new Error("Invalid user id");
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("categories")
