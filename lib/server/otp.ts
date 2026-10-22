@@ -9,10 +9,24 @@ import { Resend } from "resend";
 
 /** Duration before an OTP expires. */
 const CODE_TTL_MS = 10 * 60 * 1000;
-/** Maximum allowed failed attempts per OTP before expiration. */
+/** Maximum verification attempts per OTP before it is locked. */
 const MAX_ATTEMPTS = 5;
-/** Secret pepper used for hashing OTPs to prevent DB-leak brute-forcing. */
-const PEPPER = process.env.OTP_PEPPER ?? "echo-default-pepper-change-me";
+/** Maximum codes that may be sent to one email address per hour. */
+const MAX_SENDS_PER_HOUR = 5;
+
+/**
+ * Secret pepper used for hashing OTPs so a leaked table can't be
+ * brute-forced offline. Required in production; a fixed value is only
+ * tolerated in development and tests.
+ */
+function pepper(): string {
+  const p = process.env.OTP_PEPPER;
+  if (p) return p;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("OTP_PEPPER must be set in production.");
+  }
+  return "echo-dev-pepper";
+}
 
 /** Checks if Resend API keys are configured in environment. */
 export function isResendConfigured(): boolean {
@@ -26,7 +40,7 @@ export function generateCode(): string {
 
 /** Hashes a raw code using SHA-256 and the server pepper. */
 export function hashCode(code: string): string {
-  return createHash("sha256").update(`${PEPPER}:${code}`).digest("hex");
+  return createHash("sha256").update(`${pepper()}:${code}`).digest("hex");
 }
 
 /** Verifies a raw code against a stored hash using timing-safe comparison. */
@@ -47,6 +61,22 @@ export type OtpRow = {
   attempts: number;
   created_at: string;
 };
+
+/**
+ * Counts codes sent to `email` in the last hour, for send throttling.
+ */
+export async function countRecentOtps(email: string): Promise<number> {
+  const { getSupabaseAdmin } = await import("@/lib/server/supabase");
+  const supabase = getSupabaseAdmin();
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count, error } = await supabase
+    .from("email_otps")
+    .select("id", { count: "exact", head: true })
+    .eq("email", email)
+    .gte("created_at", since);
+  if (error) throw error;
+  return count ?? 0;
+}
 
 /**
  * Stores a new OTP record in the database.
@@ -95,40 +125,42 @@ export async function findActiveOtp(email: string): Promise<OtpRow | null> {
 }
 
 /**
- * Marks an OTP as consumed to prevent reuse.
+ * Marks an OTP as consumed so it can't be reused. Only the first caller
+ * wins: concurrent verifications of the same code can't both succeed.
  * @param id The unique identifier of the OTP record.
+ * @returns True if this call consumed the code.
  */
-export async function consumeOtp(id: string): Promise<void> {
+export async function consumeOtp(id: string): Promise<boolean> {
   const { getSupabaseAdmin } = await import("@/lib/server/supabase");
   const supabase = getSupabaseAdmin();
-  await supabase
+  const { data, error } = await supabase
     .from("email_otps")
     .update({ consumed_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .is("consumed_at", null)
+    .select("id");
+  if (error) throw error;
+  return (data ?? []).length > 0;
 }
 
 /**
- * Increments the attempt counter for a specific OTP.
+ * Atomically increments the attempt counter for an OTP. Call this BEFORE
+ * checking the code, so concurrent guesses are all counted.
  * @param id The unique identifier of the OTP record.
+ * @returns The attempt count after this attempt.
  */
-export async function bumpOtpAttempts(id: string): Promise<void> {
+export async function bumpOtpAttempts(id: string): Promise<number> {
   const { getSupabaseAdmin } = await import("@/lib/server/supabase");
   const supabase = getSupabaseAdmin();
-  // Attempt to use a Postgres RPC for atomic increment.
-  await supabase.rpc("increment_otp_attempts", { otp_id: id }).catch(() => {});
-
-  // Fallback: Manual read-modify-write.
-  const { data } = await supabase
-    .from("email_otps")
-    .select("attempts")
-    .eq("id", id)
-    .single();
-  if (data) {
-    await supabase
-      .from("email_otps")
-      .update({ attempts: (data as { attempts: number }).attempts + 1 })
-      .eq("id", id);
-  }
+  const { data, error } = await supabase.rpc("increment_otp_attempts", {
+    otp_id: id,
+  });
+  if (error) throw error;
+  // Fail closed: if the RPC returned nothing usable (e.g. null when the row
+  // is gone), treat the code as exhausted.
+  return typeof data === "number" && Number.isFinite(data)
+    ? data
+    : Number.POSITIVE_INFINITY;
 }
 
 /**
@@ -157,4 +189,4 @@ export async function sendOtpEmail(
   return { id: result.data?.id ?? "unknown" };
 }
 
-export { CODE_TTL_MS, MAX_ATTEMPTS };
+export { CODE_TTL_MS, MAX_ATTEMPTS, MAX_SENDS_PER_HOUR };
