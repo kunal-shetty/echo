@@ -8,7 +8,8 @@ import { NextResponse } from "next/server.js";
 import { isSupabaseConfigured } from "@/lib/server/supabase";
 import { createCategory, listCategoriesForUser } from "@/lib/server/categories";
 import { isIconName } from "@/lib/icon-vocab";
-import { getCurrentUserId } from "@/lib/server/user";
+import { getCurrentUserId, requireUserId } from "@/lib/server/user";
+import { serverError } from "@/lib/server/http";
 
 export const runtime = "nodejs";
 
@@ -28,8 +29,7 @@ export async function GET() {
     const cats = await listCategoriesForUser(userId);
     return NextResponse.json({ categories: cats, configured: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverError(e, "categories/GET");
   }
 }
 
@@ -62,11 +62,6 @@ export async function POST(req: Request) {
       { status: 503 },
     );
   }
-  const userId = await getCurrentUserId();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
   let body: CreateCategoryBody;
   try {
     body = (await req.json()) as CreateCategoryBody;
@@ -74,7 +69,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const name = (body.name ?? "").trim();
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
   if (name.length < 1 || name.length > 40) {
     return NextResponse.json(
       { error: "Name must be 1–40 characters" },
@@ -102,6 +97,7 @@ export async function POST(req: Request) {
       : 100;
 
   try {
+    const userId = await requireUserId();
     const cat = await createCategory(userId, { name, icon, tone, sort_order });
     return NextResponse.json({ category: cat }, { status: 201 });
   } catch (e) {
@@ -113,6 +109,6 @@ export async function POST(req: Request) {
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverError(e, "categories/POST");
   }
 }
