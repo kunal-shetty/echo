@@ -6,6 +6,7 @@ import { Check, KeyRound, Mail } from "lucide-react";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Field } from "@/components/ui/field";
 import { useRemoteUser } from "@/lib/use-remote-user";
+import { useTransactions } from "@/lib/use-transactions";
 
 type Step = "email" | "code" | "done";
 
@@ -17,6 +18,7 @@ export function SyncSheet({
   onClose: () => void;
 }) {
   const { user, refresh } = useRemoteUser();
+  const tx = useTransactions();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -25,6 +27,7 @@ export function SyncSheet({
   const [error, setError] = useState<string | null>(null);
   const [resendTimer, setResendTimer] = useState(0);
   const [migrated, setMigrated] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   // Reset state every time the sheet opens.
   useEffect(() => {
@@ -99,11 +102,24 @@ export function SyncSheet({
       }
       setMigrated(Boolean(json.migrated));
       setStep("done");
-      await refresh();
+      // The session may now point at a different (merged) account.
+      await Promise.all([refresh(), tx.refresh()]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Network error");
     } finally {
       setVerifying(false);
+    }
+  };
+
+  const signOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      await Promise.all([refresh(), tx.refresh()]);
+      onClose();
+    } finally {
+      setSigningOut(false);
     }
   };
 
@@ -259,8 +275,7 @@ export function SyncSheet({
             </p>
             {migrated && (
               <p className="max-w-xs text-xs text-muted-foreground">
-                We also merged data from another device that already used this
-                email.
+                Memories from this device were added to your existing account.
               </p>
             )}
             <motion.button
@@ -271,6 +286,16 @@ export function SyncSheet({
             >
               Done
             </motion.button>
+            {user?.email_verified_at && (
+              <button
+                type="button"
+                disabled={signingOut}
+                onClick={signOut}
+                className="text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+              >
+                {signingOut ? "Signing out…" : "Sign out of this device"}
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
