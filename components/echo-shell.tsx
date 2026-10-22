@@ -1,14 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { Mic } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { BottomNav } from "@/components/bottom-nav";
-import { VoiceSheet } from "@/components/voice-sheet";
+import { VoiceSheet, type VoiceSheetHandle } from "@/components/voice-sheet";
 import { Toast } from "@/components/ui/toast";
-import { HomeScreen } from "@/components/home/home-screen";
-import { ActivityScreen } from "@/components/activity/activity-screen";
-import { InsightsScreen } from "@/components/insights/insights-screen";
-import { ProfileScreen } from "@/components/profile/profile-screen";
 import { Fab } from "@/components/fab";
 import { ManualAddSheet } from "@/components/manual-add-sheet";
 import { BulkAddSheet } from "@/components/bulk-add-sheet";
@@ -19,7 +14,6 @@ import type { Transaction } from "@/lib/schema";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const {
-    user,
     addMode,
     setAddMode,
     editing,
@@ -30,20 +24,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setToast,
   } = useApp();
 
-  const voiceSheetRef = useRef<any>(null);
+  const voiceSheetRef = useRef<VoiceSheetHandle>(null);
   const tx = useTransactions();
-  const [scrolled, setScrolled] = useState(false);
 
+  // Start listening whenever the voice sheet opens, whichever button opened
+  // it. Deferred a tick so the sheet is mounted before we call start.
   useEffect(() => {
-    const el = document.querySelector(".app-content");
-    if (!el) return;
-    const onScroll = () => setScrolled(el.scrollTop > 12);
-    onScroll();
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+    if (!voiceOpen) return;
+    const t = setTimeout(() => voiceSheetRef.current?.start(), 0);
+    return () => clearTimeout(t);
+  }, [voiceOpen]);
 
+  /** A draft the user confirmed in the voice sheet: save it. */
   const persistExpense = async (expense: Transaction) => {
+    setVoiceOpen(false);
     const saved = await tx.add({
       accountId: expense.accountId,
       categoryId: expense.categoryId,
@@ -58,18 +52,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       transactedAt: expense.transactedAt,
       clarified: expense.clarified,
     });
+    setToast(saved ? `Saved · ${saved.merchantRaw}` : "Couldn't save. Please try again.");
+  };
+
+  /** The server already saved this transaction; just show it. */
+  const handleCreated = (expense: Transaction) => {
+    tx.ingest(expense);
     setVoiceOpen(false);
     setToast(`Saved · ${expense.merchantRaw}`);
-    return saved;
   };
 
   const handleUpdated = (expense: Transaction) => {
-    void tx.refresh();
+    tx.ingest(expense);
     setVoiceOpen(false);
     setToast(`Updated · ${expense.merchantRaw}`);
   };
 
-  const handleDeleted = (id: string) => {
+  const handleDeleted = () => {
     void tx.refresh();
     setVoiceOpen(false);
     setToast("Deleted");
@@ -79,19 +78,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="app-viewport">
       <div className="app-frame">
         <div className="app-content">{children}</div>
-        <BottomNav
-          onVoice={() => {
-            setVoiceOpen(true);
-            // Request mic access via the ref.
-            // Wrap in setTimeout to ensure the sheet is mounted before calling start.
-            setTimeout(() => voiceSheetRef.current?.start(), 0);
-          }}
-        />
+        <BottomNav onVoice={() => setVoiceOpen(true)} />
         <VoiceSheet
           ref={voiceSheetRef}
           open={voiceOpen}
           onClose={() => setVoiceOpen(false)}
           onSave={persistExpense}
+          onCreated={handleCreated}
           onUpdated={handleUpdated}
           onDeleted={handleDeleted}
         />
@@ -141,7 +134,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           }}
         />
         <Fab
-          visible={true} // Now controlled by the page or just always visible
+          visible
           onPickSingle={() => setAddMode("single")}
           onPickBulk={() => setAddMode("bulk")}
           onPickCategory={() => setAddMode("category")}
