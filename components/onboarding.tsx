@@ -10,15 +10,11 @@ import { money, normalizeTranscript } from "@/lib/fmt";
 import { toUiCategory, useCategories } from "@/lib/use-categories";
 import { useSpeech } from "@/lib/use-speech";
 import type { ParseResult } from "@/lib/parse";
-import type { Transaction } from "@/lib/schema";
+import type { Transaction, UserInfo } from "@/lib/schema";
 
 type CaptureMode = "listening" | "parsing" | "confirm" | "manual";
 
-export interface UserInfo {
-  name: string;
-  currency: "INR" | "USD" | "EUR" | "GBP";
-  reminderTime: "morning" | "evening" | "off";
-}
+export type { UserInfo };
 
 interface OnboardingProps {
   onComplete: (expense: Transaction, user: UserInfo) => void;
