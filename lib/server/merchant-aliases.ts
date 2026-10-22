@@ -6,7 +6,6 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/server/supabase";
-import { getCurrentUserId } from "@/lib/server/user";
 
 /** Database representation of a merchant alias. */
 export interface DbMerchantAlias {
@@ -51,12 +50,10 @@ function normalize(text: string): string {
 }
 
 /**
- * Retrieves all aliases for the current user, sorted by frequency of use.
+ * Retrieves all aliases for a user, sorted by frequency of use.
  * @returns List of merchant aliases.
  */
-export async function listAliases(): Promise<DbMerchantAlias[]> {
-  const userId = await getCurrentUserId();
-  if (!userId) return [];
+export async function listAliases(userId: string): Promise<DbMerchantAlias[]> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("merchant_aliases")
@@ -75,15 +72,16 @@ export interface MatchedAlias {
 
 /**
  * Finds the closest existing alias within a given distance threshold.
+ * @param aliases The user's aliases (see listAliases).
  * @param spoken The user's spoken phrase.
  * @param threshold Max distance to be considered a match (default 0.3).
  * @returns The best match, or null if no suitable alias is found.
  */
 export async function matchAlias(
+  aliases: DbMerchantAlias[],
   spoken: string,
   threshold = 0.3,
 ): Promise<MatchedAlias | null> {
-  const aliases = await listAliases();
   if (aliases.length === 0) return null;
   const target = normalize(spoken);
   if (!target) return null;
@@ -100,16 +98,18 @@ export async function matchAlias(
 
 /**
  * Creates or updates a merchant alias.
+ * @param userId The owning user.
  * @param input The alias, canonical name, and associated category.
  * @returns The upserted alias record.
  */
-export async function upsertAlias(input: {
-  alias: string;
-  canonical: string;
-  categoryId: string | null;
-}): Promise<DbMerchantAlias | null> {
-  const userId = await getCurrentUserId();
-  if (!userId) return null;
+export async function upsertAlias(
+  userId: string,
+  input: {
+    alias: string;
+    canonical: string;
+    categoryId: string | null;
+  },
+): Promise<DbMerchantAlias | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("merchant_aliases")
@@ -133,23 +133,28 @@ export async function upsertAlias(input: {
 /**
  * Resolves a spoken merchant phrase to a canonical name.
  * Tries full-phrase match first, then falls back to token-by-token matching.
+ * @param userId The user whose aliases to match against.
  * @param spoken The raw utterance containing the merchant name.
  * @returns The resolved canonical name and associated alias record.
  */
 export async function resolveMerchant(
+  userId: string,
   spoken: string,
 ): Promise<{ canonical: string; alias: DbMerchantAlias | null; createdNew: boolean }> {
   const trimmed = spoken.trim();
   if (!trimmed) return { canonical: "", alias: null, createdNew: false };
 
+  // Load once; every match below runs against the same list.
+  const aliases = await listAliases(userId);
+
   // Attempt a full-phrase match first.
-  const whole = await matchAlias(trimmed);
+  const whole = await matchAlias(aliases, trimmed);
   if (whole) return { canonical: whole.alias.canonical, alias: whole.alias, createdNew: false };
 
   // Token-level fallback: match the longest tokens first.
   const tokens = trimmed.split(/\s+/).filter((t) => t.length >= 3);
   for (const token of [...tokens].sort((a, b) => b.length - a.length)) {
-    const m = await matchAlias(token);
+    const m = await matchAlias(aliases, token);
     if (m) return { canonical: m.alias.canonical, alias: m.alias, createdNew: false };
   }
 
