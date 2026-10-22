@@ -6,11 +6,10 @@
  */
 
 import { getSupabaseAdmin } from "@/lib/server/supabase";
-import { getCurrentUserId } from "@/lib/server/user";
 import type { QueryKind, QueryRange, NLQSpecification } from "@/lib/parse";
 import type { Transaction } from "@/lib/schema";
 import { indexCategories, toUiTransaction } from "@/lib/transaction-shape";
-import { listSystemCategories } from "@/lib/server/categories";
+import { listCategoriesForUser } from "@/lib/server/categories";
 import { money } from "@/lib/fmt";
 
 export interface QueryFilters {
@@ -66,6 +65,34 @@ function aggregateNlq(spec: NLQSpecification, rows: any[]): number | null {
     case "avg": return Math.round(amounts.reduce((a, b) => a + b, 0) / amounts.length);
     default: return null;
   }
+}
+
+/** NLQ filter fields/operators the LLM may use. Anything else is dropped. */
+const NLQ_FIELDS = new Set<NLQSpecification["filters"][number]["field"]>([
+  "category_id",
+  "merchant_canonical",
+  "merchant_raw",
+  "direction",
+  "transacted_at",
+]);
+const NLQ_OPERATORS = new Set(["eq", "ilike", "gte", "lt", "in"]);
+
+function isScalar(v: unknown): v is string | number | boolean {
+  return typeof v === "string" || typeof v === "number" || typeof v === "boolean";
+}
+
+/**
+ * Prepares LLM-derived text for use inside a double-quoted PostgREST
+ * filter value. Quoting neutralizes the filter syntax characters
+ * (`,` `.` `:` `(` `)`); we strip the characters that could end the quoted
+ * string (`"` and backslash) and the LIKE wildcards (`%` `_` `*`).
+ */
+export function sanitizeFilterText(text: string): string {
+  return text
+    .replace(/["\\%_*]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
 }
 
 /** Resolve a [start, end) UTC range for the named period. */
@@ -164,26 +191,22 @@ function categoryFilterLabel(category: string | null): string {
  * Executes a financial query against the database based on the provided filters.
  * Resolves date ranges to UTC timestamps, maps category names to IDs, and
  * computes the total or finds the biggest transaction.
+ * @param userId The user whose transactions to query.
  * @param filters The query constraints.
  * @returns A QueryResult containing the data and human-readable summaries.
- * @throws Error if no device identity is found.
  */
 export async function runQuery(
+  userId: string,
   filters: QueryFilters,
 ): Promise<QueryResult> {
-  const userId = await getCurrentUserId();
-  if (!userId) {
-    throw new Error("No device identity.");
-  }
-
   const supabase = getSupabaseAdmin();
   const range = filters.range ?? "all";
   const bounds = rangeBounds(range, new Date());
 
   // Resolve category name → id if provided.
+  const cats = await listCategoriesForUser(userId).catch(() => []);
   let categoryId: string | null = null;
   if (filters.categoryName) {
-    const cats = await listSystemCategories().catch(() => []);
     const match = cats.find(
       (c) => c.name.toLowerCase() === filters.categoryName!.toLowerCase(),
     );
@@ -207,11 +230,18 @@ export async function runQuery(
         .lt("transacted_at", nlqBounds[1].toISOString());
     }
     for (const f of nlqFilters) {
+      if (!NLQ_FIELDS.has(f.field) || !NLQ_OPERATORS.has(f.operator)) continue;
+      if (f.operator === "in") {
+        if (Array.isArray(f.value) && f.value.every(isScalar)) {
+          q = q.in(f.field, f.value);
+        }
+        continue;
+      }
+      if (!isScalar(f.value)) continue;
       if (f.operator === "eq") q = q.eq(f.field, f.value);
       else if (f.operator === "ilike") q = q.ilike(f.field, `%${f.value}%`);
       else if (f.operator === "gte") q = q.gte(f.field, f.value);
       else if (f.operator === "lt") q = q.lt(f.field, f.value);
-      else if (f.operator === "in") q = q.in(f.field, f.value);
     }
   } else {
     if (bounds) {
@@ -221,9 +251,10 @@ export async function runQuery(
     }
     if (categoryId) q = q.eq("category_id", categoryId);
     if (filters.direction) q = q.eq("direction", filters.direction);
-    if (filters.merchant) {
+    const merchant = filters.merchant ? sanitizeFilterText(filters.merchant) : "";
+    if (merchant) {
       q = q.or(
-        `merchant_canonical.ilike.%${filters.merchant}%,merchant_raw.ilike.%${filters.merchant}%`,
+        `merchant_canonical.ilike."%${merchant}%",merchant_raw.ilike."%${merchant}%"`,
       );
     }
   }
@@ -248,8 +279,7 @@ export async function runQuery(
     top = top.slice(0, limit);
   }
 
-  const sysCats = await listSystemCategories().catch(() => []);
-  const uiCats = indexCategories(sysCats);
+  const uiCats = indexCategories(cats);
   const uiRows = top.map((r) => toUiTransaction(r, uiCats));
 
   const total =
