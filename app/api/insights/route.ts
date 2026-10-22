@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server.js";
-import { getSupabaseAdmin } from "@/lib/server/supabase";
+import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/server/supabase";
+import { serverError } from "@/lib/server/http";
 import { getCurrentUserId } from "@/lib/server/user";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const userId = await getCurrentUserId();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ insights: [] });
   }
-
-  const supabase = getSupabaseAdmin();
-
   try {
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      return NextResponse.json({ insights: [] });
+    }
+    const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("insights")
       .select("*")
@@ -23,7 +25,6 @@ export async function GET() {
 
     return NextResponse.json({ insights: data ?? [] });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Fetch failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return serverError(e, "insights/GET");
   }
 }
