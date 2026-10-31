@@ -18,7 +18,6 @@ export default function NotificationsPage() {
       <Header
         screen="notifications"
         onVoice={() => setVoiceOpen(true)}
-        scrolled={false}
       />
       <main className="flex flex-col gap-5 px-5 pb-28">
         <div className="panel !p-2">
