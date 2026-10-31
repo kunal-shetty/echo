@@ -19,6 +19,7 @@ import { money, normalizeTranscript } from "@/lib/fmt";
 import { toUiCategory, useCategories } from "@/lib/use-categories";
 import { useSpeech } from "@/lib/use-speech";
 import { useSpeechSynth } from "@/lib/use-speech-synth";
+import { haptic } from "@/lib/native/haptics";
 import type { ParseResult } from "@/lib/parse";
 import type { Transaction } from "@/lib/schema";
 
@@ -108,6 +109,7 @@ export const VoiceSheet = forwardRef<VoiceSheetHandle, VoiceSheetProps>(
               kind: askData.query.kind,
             });
             setMode("answer");
+            haptic("success");
             if (askData.query.spoken) synth.speak(askData.query.spoken);
             return;
           }
@@ -169,6 +171,7 @@ export const VoiceSheet = forwardRef<VoiceSheetHandle, VoiceSheetProps>(
               kind: askData.query.kind,
             });
             setMode("answer");
+            haptic("success");
             if (askData.query.spoken) synth.speak(askData.query.spoken);
             return;
           }
@@ -220,6 +223,7 @@ export const VoiceSheet = forwardRef<VoiceSheetHandle, VoiceSheetProps>(
             result.amount == null ||
             !result.merchant
           ) {
+            haptic("warning");
             setParseError(
               data.warning ??
                 "Couldn't parse that confidently. Please confirm below.",
@@ -237,6 +241,7 @@ export const VoiceSheet = forwardRef<VoiceSheetHandle, VoiceSheetProps>(
             setMode("confirm");
           }
         } catch (e) {
+          haptic("error");
           setParseError(e instanceof Error ? e.message : "Parse failed");
           setMode("manual");
         }
