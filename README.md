@@ -111,3 +111,33 @@ npm test                  # frontend component tests (Vitest)
 npx playwright install    # once, to download browsers
 npm run test:e2e          # end-to-end tests; starts FastAPI and `next dev` automatically
 ```
+
+## 📱 Android app & voice agent
+
+The Android app (`android/`, built with Capacitor) loads the running Next.js
+server, so the UI and `/api/*` stay the same. On top of the web app it adds:
+
+- **Haptics:** taps on buttons, plus distinct buzzes for saved, check-this and failed. You can turn them off in App settings.
+- **Notifications:** a daily memory nudge (morning/evening) scheduled on the phone, and replies from the agent.
+- **An always-on voice agent you can name** (Profile → Voice agent). A background service listens offline for the name using Vosk (`vosk-model-small-en-in-0.4`, downloaded once, ~37 MB). Audio leaves the phone only after the name is heard. The command is then sent to `POST /api/agent/turn`, which transcribes it, acts on it or answers it. The agent speaks the result, vibrates and posts a notification. "Teach it your name" records how the recognizer hears unusual names.
+
+Requirements: Android Studio's SDK, JDK 21, and a phone with USB debugging on.
+
+```bash
+npm run dev:api                     # FastAPI on :8000
+npm run dev                         # Next on :3000
+
+# Let the phone reach your machine (find your LAN IP with ipconfig)
+DEV_ORIGINS=192.168.1.20 npm run dev
+CAP_SERVER_URL=http://192.168.1.20:3000 npm run android:sync
+
+npm run android:run                 # install and launch on the connected phone
+npm run android:apk                 # or build android/app/build/outputs/apk/debug/app-debug.apk
+npm run test:android                # wake-word matcher unit tests
+```
+
+Open the app once so it has a session, then turn on Profile → Voice agent.
+Set Echo's battery use to "Unrestricted" so Android doesn't stop the agent.
+Android only lets an app start the microphone service while the app is open.
+So if the phone reboots or the system kills the agent, it posts a notification asking you to reopen Echo.
+iOS doesn't allow background wake-word listening, so the agent is Android-only.
