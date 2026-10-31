@@ -20,6 +20,7 @@ const TITLES: Record<Screen, (name: string) => string> = {
   profile: () => "Profile",
   notifications: () => "Notifications",
   settings: () => "App settings",
+  agent: () => "Voice agent",
   help: () => "Help & support",
   privacy: () => "Privacy Policy",
   terms: () => "Terms of Service",
