@@ -38,10 +38,15 @@ function initialsFromName(name: string): string {
 export function Avatar({ size = 9, name }: { size?: number; name?: string }) {
   return (
     <div
-      className="grid place-items-center rounded-full bg-surface-3 text-xs font-semibold text-foreground ring-1 ring-border"
+      className="grid shrink-0 place-items-center rounded-full bg-gradient-to-br from-emerald/80 to-violet/80 p-px"
       style={{ width: `${size * 0.25}rem`, height: `${size * 0.25}rem` }}
     >
-      {initialsFromName(name ?? "Echo")}
+      <span
+        className="grid size-full place-items-center rounded-full bg-surface-2 font-semibold text-foreground"
+        style={{ fontSize: `${Math.max(0.7, size * 0.035)}rem` }}
+      >
+        {initialsFromName(name ?? "Echo")}
+      </span>
     </div>
   );
 }
