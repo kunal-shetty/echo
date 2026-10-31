@@ -131,7 +131,11 @@ export function todayEyebrow(): string {
  * @returns Abbreviated month (e.g., "Aug").
  */
 export function shortMonth(month: string): string {
-  return month.slice(0, 3);
+  const [year, mon] = month.split("-").map(Number);
+  if (!year || !mon) return month.slice(0, 3);
+  return new Date(year, mon - 1, 1).toLocaleDateString("en-IN", {
+    month: "short",
+  });
 }
 
 /**
