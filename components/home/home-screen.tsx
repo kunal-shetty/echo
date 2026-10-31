@@ -1,17 +1,20 @@
 "use client";
 
-import { Lightbulb, Mic, Receipt } from "lucide-react";
+import { ChevronRight, Lightbulb, Mic, Receipt } from "lucide-react";
 import { motion } from "motion/react";
 import { type Transaction } from "@/lib/schema";
 import { Header } from "@/components/home/header";
 import { SummaryCard } from "@/components/home/summary-card";
-import { TransactionRow } from "@/components/transaction-row";
+import {
+  TransactionRow,
+  TransactionRowSkeleton,
+} from "@/components/transaction-row";
 import { useApp } from "@/context/AppContext";
 import { useRouter } from "next/navigation";
 import { useTransactions } from "@/lib/use-transactions";
 
 export function HomeScreen() {
-  const { user, setVoiceOpen } = useApp();
+  const { setVoiceOpen, setEditing } = useApp();
   const router = useRouter();
   const tx = useTransactions();
 
@@ -25,20 +28,18 @@ export function HomeScreen() {
       <Header
         screen="home"
         onVoice={() => setVoiceOpen(true)}
-        scrolled={false}
-        displayName={user.name}
       />
       <main className="flex flex-col gap-5 px-5 pb-28 echo-stagger">
         <div>
           <p className="eyebrow text-emerald">Your financial memory</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-            Ask Echo where your money went.
+            Ask Echo <span className="text-gradient">where your money went.</span>
           </h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             The more you remember, the more useful your answers become.
           </p>
         </div>
-        <SummaryCard expenses={expenses} />
+        <SummaryCard expenses={expenses} loading={loading} />
         <div className="grid grid-cols-2 gap-3">
           <motion.button
             type="button"
@@ -91,22 +92,30 @@ export function HomeScreen() {
               <h2 className="text-lg font-semibold">Recent memories</h2>
               <button
                 type="button"
-                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                className="group flex items-center gap-0.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
                 onClick={() => router.push("/activity")}
               >
                 View all
+                <ChevronRight
+                  size={15}
+                  className="transition-transform group-hover:translate-x-0.5"
+                />
               </button>
             </div>
-            <div className="divide-y divide-border rounded-2xl bg-surface-1 px-3">
-              {expenses.slice(0, 4).map((item, i) => (
-                <TransactionRow
-                  item={item}
-                  index={i}
-                  key={item.id}
-                  onClick={() => {}}
-                />
-              ))}
-            </div>
+            {loading ? (
+              <TransactionRowSkeleton />
+            ) : (
+              <div className="list-card">
+                {expenses.slice(0, 4).map((item, i) => (
+                  <TransactionRow
+                    item={item}
+                    index={i}
+                    key={item.id}
+                    onClick={setEditing}
+                  />
+                ))}
+              </div>
+            )}
           </>
         )}
       </main>
@@ -128,9 +137,13 @@ function EmptyState({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div className="grid size-12 place-items-center rounded-full bg-emerald/15 text-emerald">
-        <Receipt size={22} />
-      </div>
+      <motion.div
+        className="grid size-14 place-items-center rounded-2xl bg-emerald/15 text-emerald ring-1 ring-emerald/25"
+        animate={{ y: [0, -4, 0] }}
+        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+      >
+        <Receipt size={24} />
+      </motion.div>
       <p className="text-base font-medium">No memories yet</p>
       <p className="max-w-xs text-sm text-muted-foreground">
         Tap the mic and tell Echo one thing you spent on — like
