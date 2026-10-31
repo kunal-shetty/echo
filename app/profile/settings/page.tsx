@@ -24,7 +24,6 @@ export default function SettingsPage() {
       <Header
         screen="settings"
         onVoice={() => setVoiceOpen(true)}
-        scrolled={false}
       />
       <main className="flex flex-col gap-5 px-5 pb-28">
         <div className="panel !p-2">
@@ -63,8 +62,10 @@ export default function SettingsPage() {
               aria-checked={haptics}
               aria-label="Vibration"
               onClick={toggleHaptics}
-              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                haptics ? "bg-emerald" : "bg-surface-3"
+              className={`relative h-7 w-12 shrink-0 rounded-full ring-1 transition-colors duration-300 ${
+                haptics
+                  ? "bg-emerald shadow-[0_0_14px_oklch(0.78_0.17_160/35%)] ring-emerald/40"
+                  : "bg-surface-3 ring-border"
               }`}
             >
               <motion.span
@@ -84,7 +85,9 @@ export default function SettingsPage() {
               <Lock size={17} />
             </span>
             <span className="min-w-0 flex-1 text-left">
-              <span className="block text-sm font-medium">Biometric Lock</span>
+              <span className="flex items-center gap-2 text-sm font-medium">
+                Biometric Lock <span className="badge-soon">Soon</span>
+              </span>
               <span className="mt-1 block text-xs text-muted-foreground">
                 Secure your financial data with FaceID/Fingerprint.
               </span>
@@ -95,7 +98,9 @@ export default function SettingsPage() {
               <Shield size={17} />
             </span>
             <span className="min-w-0 flex-1 text-left">
-              <span className="block text-sm font-medium">Two-Factor Auth</span>
+              <span className="flex items-center gap-2 text-sm font-medium">
+                Two-Factor Auth <span className="badge-soon">Soon</span>
+              </span>
               <span className="mt-1 block text-xs text-muted-foreground">
                 Add an extra layer of security.
               </span>
