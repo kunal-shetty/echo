@@ -6,7 +6,9 @@ of the paid Groq/Resend endpoints; anything security-critical (OTP sends)
 is additionally limited in the database.
 """
 
+import hmac
 import math
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -54,7 +56,20 @@ def take_token(key: str, limit: int, window_s: float) -> bool:
 
 
 def client_ip(request: Request) -> str:
-    """Best-effort client IP from proxy headers."""
+    """Best-effort client IP from proxy headers.
+
+    When the frontend runs on a separate Vercel project, Vercel replaces
+    x-forwarded-for with the frontend's own address, so the frontend's
+    proxy.ts passes the visitor's IP in x-echo-client-ip. It's only trusted
+    alongside the shared ECHO_PROXY_SECRET, so callers can't spoof it.
+    """
+    secret = os.getenv("ECHO_PROXY_SECRET")
+    relayed = request.headers.get("x-echo-client-ip")
+    if secret and relayed:
+        given = request.headers.get("x-echo-proxy-secret", "")
+        if hmac.compare_digest(given.encode(), secret.encode()):
+            return relayed.split(",")[0].strip()
+
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[0].strip()
