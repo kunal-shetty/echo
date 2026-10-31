@@ -10,6 +10,7 @@ import {
   CircleHelp,
   Cloud,
   CreditCard,
+  Ear,
   Settings,
   UserRound,
 } from "lucide-react";
@@ -68,9 +69,18 @@ export function ProfileScreen() {
       ) : undefined,
     },
     {
+      icon: Ear,
+      label: "Voice agent",
+      note: "Name it, then talk to it hands-free",
+      onClick: () => router.push("/profile/agent"),
+    },
+    {
       icon: Bell,
       label: "Notifications",
-      note: "Evening memory prompt",
+      note:
+        user.reminderTime === "off"
+          ? "Daily nudge off"
+          : `Daily nudge in the ${user.reminderTime}`,
       onClick: () => router.push("/profile/notifications"),
     },
     {
