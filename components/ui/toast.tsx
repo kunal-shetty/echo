@@ -1,67 +1,50 @@
 /**
  * @file toast.tsx
- * @description A simple, animated notification toast.
- * Displays a success message and automatically dismisses after a delay.
+ * @description A small animated notification pill.
+ * Dismissal is timed by `AppContext`; this component only renders.
  */
 
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
+import { Check, X } from "lucide-react";
 import { SPRING_SNAPPY } from "@/lib/motion";
-
-interface ToastProps {
-  /** The message to display. If null, the toast is hidden. */
-  message: string | null;
-  /** Callback triggered after the auto-dismiss timeout. */
-  onDismiss?: () => void;
-}
+import type { ToastState } from "@/context/AppContext";
 
 /**
- * A small, floating notification that appears at the bottom of the screen.
- * Auto-dismisses after 1.8 seconds of being active.
+ * A floating notification that springs up above the bottom nav.
+ * A new `toast.id` replaces the current pill with a fresh animation.
  */
-export function Toast({ message, onDismiss }: ToastProps) {
+export function Toast({ toast }: { toast: ToastState | null }) {
   return (
-    <AnimatePresence>
-      {message && (
+    <AnimatePresence mode="popLayout">
+      {toast && (
         <motion.div
+          key={toast.id}
           className="toast"
-          role="status"
-          aria-live="polite"
-          initial={{ opacity: 0, y: 12, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 8, scale: 0.98 }}
+          data-tone={toast.tone}
+          role={toast.tone === "error" ? "alert" : "status"}
+          aria-live={toast.tone === "error" ? "assertive" : "polite"}
+          initial={{ opacity: 0, y: 16, scale: 0.92, x: "-50%" }}
+          animate={{ opacity: 1, y: 0, scale: 1, x: "-50%" }}
+          exit={{ opacity: 0, y: 8, scale: 0.96, x: "-50%" }}
           transition={SPRING_SNAPPY}
-          onAnimationComplete={(d) => {
-            if (d === "animate" && onDismiss) {
-              const id = setTimeout(onDismiss, 1800);
-              return () => clearTimeout(id);
-            }
-          }}
         >
-          <CheckIcon />
-          <span>{message}</span>
+          <motion.span
+            className="toast-icon"
+            initial={{ scale: 0, rotate: -45 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ ...SPRING_SNAPPY, delay: 0.08 }}
+          >
+            {toast.tone === "error" ? (
+              <X size={13} strokeWidth={2.8} />
+            ) : (
+              <Check size={13} strokeWidth={2.8} />
+            )}
+          </motion.span>
+          <span>{toast.message}</span>
         </motion.div>
       )}
     </AnimatePresence>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className="text-emerald"
-    >
-      <path d="M20 6L9 17l-5-5" />
-    </svg>
   );
 }
