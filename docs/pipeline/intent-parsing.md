@@ -6,11 +6,11 @@ This document describes the second stage of the Echo pipeline: transforming a ra
 Echo leverages the Groq LLM (Llama-3) to perform Named Entity Recognition (NER) and Intent Classification on the user's transcript.
 
 ## Technical Flow
-1. **Request**: The `app/api/voice-intent/route.ts` receives the transcript.
+1. **Request**: The `/api/voice-intent` route (`backend/app/routes/voice.py`) receives the transcript.
 2. **Contextualization**: The system attaches "Context" to the LLM prompt:
     - **Current Time**: Resolves relative terms like "yesterday" or "last month".
     - **Recent History**: The last 5 transactions are provided so the LLM can identify "Update" or "Delete" targets (e.g., "Change the lunch entry").
-3. **LLM Processing (`lib/groq.ts`)**:
+3. **LLM Processing (`backend/app/llm.py`, a LangChain chain)**:
     - The LLM is instructed to return a **STRICT JSON** object.
     - It classifies the action: `create`, `update`, `delete`, or `query`.
 4. **Entity Extraction**:

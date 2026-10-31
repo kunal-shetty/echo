@@ -5,6 +5,7 @@ pipeline {
         stage('Install') {
             steps {
                 sh 'pnpm install'
+                sh 'pip install -e "backend[dev]"'
             }
         }
         stage('Lint') {
@@ -15,6 +16,7 @@ pipeline {
         stage('Unit & Integration Tests') {
             steps {
                 sh 'pnpm exec vitest run'
+                sh 'python -m pytest backend --junitxml=backend/test-results.xml'
             }
         }
         stage('E2E Tests') {
@@ -26,7 +28,7 @@ pipeline {
     }
     post {
         always {
-            junit '**/__tests__/**/*.xml'
+            junit '**/__tests__/**/*.xml, backend/test-results.xml'
         }
     }
 }

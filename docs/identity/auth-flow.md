@@ -12,7 +12,7 @@ devices. Guests and verified users are both stored server-side.
 cookie holds an opaque random id; the server looks it up in the `sessions`
 table (and checks `expires_at`) to find the user. Nothing else the client
 sends — user ids, device ids, other cookies, request bodies — is ever
-treated as an identity. See `lib/server/user.ts`.
+treated as an identity. See `backend/app/user.py`.
 
 ## The Identity Hierarchy
 

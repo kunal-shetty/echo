@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Category, Tone } from "@/lib/schema";
-import type { DbCategory } from "@/lib/server/categories";
+import type { DbCategory } from "@/lib/schema";
 import type { IconName } from "@/lib/icon-vocab";
 
 export interface CreateCategoryInput {

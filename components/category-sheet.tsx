@@ -6,7 +6,7 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Field } from "@/components/ui/field";
 import { IconPicker } from "@/components/ui/icon-picker";
 import { useCategories } from "@/lib/use-categories";
-import type { DbCategory } from "@/lib/server/categories";
+import type { DbCategory } from "@/lib/schema";
 import type { Tone } from "@/lib/schema";
 import type { IconName } from "@/lib/icon-vocab";
 

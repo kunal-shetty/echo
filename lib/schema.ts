@@ -59,6 +59,18 @@ export interface Category {
   sortOrder: number;
 }
 
+/** A category row exactly as the `/api/categories` endpoints return it. */
+export interface DbCategory {
+  id: string;
+  user_id: string | null;
+  parent_id: string | null;
+  name: string;
+  icon: string | null;
+  color: string | null;
+  tone: Tone;
+  sort_order: number;
+}
+
 /** Profile preferences collected during onboarding. */
 export interface UserInfo {
   name: string;

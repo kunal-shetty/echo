@@ -20,7 +20,7 @@ path for everyone and no client-side copy of the ledger.
 
 ## Server
 - Every write goes through `validateTransactionInput`
-  (`lib/server/transaction-input.ts`): the account is always the user's
+  (`backend/app/transaction_input.py`): the account is always the user's
   default (clients can't choose it), categories must be visible to the user,
   and lengths, currency, direction, and source are normalized.
 - Voice creates are saved immediately only at confidence ≥ 0.7; below that

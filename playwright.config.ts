@@ -11,10 +11,19 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    command: "npm run dev",
-    url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      // The FastAPI backend; Next proxies /api/* to it (next.config.ts).
+      command: "python -m uvicorn app.main:app --port 8000 --app-dir backend",
+      url: "http://127.0.0.1:8000/api/health",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    {
+      command: "npm run dev",
+      url: `http://localhost:${PORT}`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+  ],
 });

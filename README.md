@@ -30,12 +30,16 @@ Echo uses a sophisticated **2-Layer Processing Pipeline** to balance speed and i
 - **TTS:** Low-latency voice synthesis (Piper) for natural, immediate feedback.
 
 ### 2. The Intelligence Path (Cloud Inference)
-- **Inference Engine:** Powered by **Groq** for ultra-fast LLM responses.
+- **Inference Engine:** Powered by **Groq** for ultra-fast LLM responses, orchestrated with **LangChain** (prompt → model → output-parser chains, with Pydantic-validated intents).
 - **Zero-Shot Intent Classification:** Natural language is classified into `create`, `update`, `delete`, or `query` intents in real-time.
 - **Deterministic Extraction:** Strict JSON schema enforcement ensures unstructured voice logs (e.g., *"Spent 500 bucks on dinner with team"*) are transformed into type-safe database records.
 - **Contextual Memory:** The parser is fed recent transaction history, allowing it to resolve references like *"change the last one to 600"* or *"delete that blinkit order"*.
 
-### 3. Data Layer
+### 3. Application Layout
+- **Frontend:** Next.js + React (`app/`, `components/`, `lib/`).
+- **Backend:** Python **FastAPI** (`backend/`) serves every `/api/*` route. Next.js proxies `/api/*` to it (`next.config.ts`), so the browser talks to one origin and the session cookie stays first-party.
+
+### 4. Data Layer
 - **Database:** Supabase (PostgreSQL) with transactional states.
 - **Merchant Intelligence:** A custom alias system that learns and canonicalizes merchant names (e.g., *"Zomato"*, *"Zomato Ltd"*, *"Zomato App"* $\rightarrow$ `Zomato`).
 
@@ -56,6 +60,7 @@ Echo uses a sophisticated **2-Layer Processing Pipeline** to balance speed and i
 
 ### Prerequisites
 - Node.js 18+
+- Python 3.11+
 - Supabase Project
 - Groq API Key
 
@@ -72,25 +77,37 @@ Echo uses a sophisticated **2-Layer Processing Pipeline** to balance speed and i
 3. Set up your `.env` file:
    ```env
    GROQ_API_KEY=your_groq_key
+   GROQ_MODEL=qwen/qwen3.8-27b                        # optional: chat model override
    SUPABASE_URL=your_supabase_url
    SUPABASE_SERVICE_ROLE_KEY=your_service_role_key   # server-only; never expose
    OTP_PEPPER=a_long_random_secret                    # required in production
    RESEND_API_KEY=your_resend_key                     # optional: email sync
    RESEND_FROM="Echo <codes@yourdomain.com>"          # optional: email sync
+   APP_ENV=production                                 # production only: secure cookies, required OTP_PEPPER
+   BACKEND_URL=http://127.0.0.1:8000                  # optional: where Next proxies /api/*
    ```
+   The backend reads the same `.env` / `.env.local` from the repo root.
 4. Apply the database schema (idempotent; re-run after pulling changes):
    ```bash
    psql "$SUPABASE_DB_URL" -f schema.sql
    ```
    or paste `schema.sql` into the Supabase SQL Editor.
-5. Run the development server:
+5. Install the Python backend (a virtualenv is recommended):
    ```bash
-   npm run dev
+   python -m venv backend/.venv
+   source backend/.venv/bin/activate    # Windows: backend\.venv\Scripts\activate
+   pip install -e "backend[dev]"
+   ```
+6. Run the backend and the frontend, each in its own terminal (with the virtualenv active for the backend):
+   ```bash
+   npm run dev:api    # FastAPI on :8000 (API docs at http://localhost:8000/api/docs)
+   npm run dev        # Next.js on :3000, proxying /api/* to FastAPI
    ```
 
 ### Testing
 ```bash
-npm test                  # unit + API route tests (Vitest)
+npm run test:api          # backend unit + API route tests (pytest)
+npm test                  # frontend component tests (Vitest)
 npx playwright install    # once, to download browsers
-npm run test:e2e          # end-to-end tests; starts `next dev` automatically
+npm run test:e2e          # end-to-end tests; starts FastAPI and `next dev` automatically
 ```
