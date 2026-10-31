@@ -22,6 +22,7 @@ import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { SyncSheet } from "@/components/profile/sync-sheet";
 import { useRemoteUser } from "@/lib/use-remote-user";
 import { useApp } from "@/context/AppContext";
+import { EASE_OUT } from "@/lib/motion";
 import type { UserInfo } from "@/components/onboarding";
 
 interface Row {
@@ -41,6 +42,13 @@ export function ProfileScreen() {
   const { user: remote } = useRemoteUser();
   const displayName = user.name || "User";
 
+  // Seed the draft from the saved name each time, so an abandoned edit
+  // (or a name that loaded after mount) never shows stale text.
+  const openEditor = () => {
+    setDraftName(user.name);
+    setEditing(true);
+  };
+
   const syncNote = remote?.email_verified_at
     ? (remote.email ?? "Verified")
     : "Use Echo on another device";
@@ -49,13 +57,14 @@ export function ProfileScreen() {
     {
       icon: UserRound,
       label: "Personal details",
-      note: "Name, email, preferences",
-      onClick: () => setEditing(true),
+      note: "Name, currency, reminders",
+      onClick: openEditor,
     },
     {
       icon: CreditCard,
       label: "Connected accounts",
-      note: "2 accounts connected",
+      note: "Link a bank or card",
+      badge: <span className="badge-soon">Soon</span>,
     },
     {
       icon: Cloud,
@@ -102,14 +111,18 @@ export function ProfileScreen() {
       <Header
         screen="profile"
         onVoice={() => setVoiceOpen(true)}
-        scrolled={false}
       />
       <main className="flex flex-col gap-5 px-5 pb-28">
-        <div className="profile-card">
-          <Avatar size={11} name={displayName} />
-          <div>
+        <motion.div
+          className="profile-card relative overflow-hidden"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: EASE_OUT }}
+        >
+          <Avatar size={12} name={displayName} />
+          <div className="min-w-0">
             <p className="font-semibold">{displayName}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 truncate text-sm text-muted-foreground">
               {remote?.email_verified_at && remote.email
                 ? remote.email
                 : "Tap Sync below to use Echo across devices"}
@@ -117,29 +130,24 @@ export function ProfileScreen() {
           </div>
           <button
             type="button"
-            className="ml-auto text-sm font-medium text-emerald transition-transform hover:translate-x-0.5"
-            onClick={() => {
-              setDraftName(user.name);
-              setEditing(true);
-            }}
+            className="ml-auto shrink-0 rounded-lg px-2 py-1 text-sm font-medium text-emerald transition-colors hover:bg-emerald/10"
+            onClick={openEditor}
           >
             Edit
           </button>
-        </div>
-        <div className="panel !p-2">
+        </motion.div>
+        <div className="panel !p-2 echo-stagger">
           {rows.map(({ icon: Icon, label, note, onClick, badge }) => (
             <motion.button
               type="button"
               className="settings-row"
               key={label}
               onClick={onClick}
-              whileTap={{
-                scale: 0.99,
-                backgroundColor: "oklch(0.2 0.03 255 / 70%)",
-              }}
+              disabled={!onClick}
+              whileTap={onClick ? { scale: 0.985 } : undefined}
               transition={{ type: "spring", stiffness: 400, damping: 24 }}
             >
-              <span className="grid size-9 place-items-center rounded-xl bg-surface-3 text-muted-foreground">
+              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-surface-3 text-muted-foreground ring-1 ring-border">
                 <Icon size={17} />
               </span>
               <span className="min-w-0 flex-1 text-left">
@@ -151,7 +159,12 @@ export function ProfileScreen() {
                   {note}
                 </span>
               </span>
-              <ChevronRight size={17} className="text-muted-foreground" />
+              {onClick && (
+                <ChevronRight
+                  size={17}
+                  className="chevron shrink-0 text-muted-foreground"
+                />
+              )}
             </motion.button>
           ))}
         </div>
@@ -224,8 +237,9 @@ export function ProfileScreen() {
           <motion.button
             type="button"
             className="primary-button"
+            disabled={!draftName.trim()}
             onClick={() => {
-              if (draftName.trim()) updateUser({ name: draftName.trim() });
+              updateUser({ name: draftName.trim() });
               setEditing(false);
             }}
             whileTap={{ scale: 0.99 }}
