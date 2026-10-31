@@ -1,12 +1,17 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Header } from "@/components/home/header";
+import { Segmented } from "@/components/ui/segmented";
 import { useApp } from "@/context/AppContext";
-import { motion } from "motion/react";
-import { Bell, Check } from "lucide-react";
+import { Bell, Ear } from "lucide-react";
+import { isNativeApp } from "@/lib/native/platform";
+import type { UserInfo } from "@/lib/schema";
 
 export default function NotificationsPage() {
-  const { setVoiceOpen } = useApp();
+  const { setVoiceOpen, user, updateUser } = useApp();
+  const [native, setNative] = useState(false);
+  useEffect(() => setNative(isNativeApp()), []);
 
   return (
     <>
@@ -22,18 +27,41 @@ export default function NotificationsPage() {
               <Bell size={17} />
             </span>
             <span className="min-w-0 flex-1 text-left">
-              <span className="block text-sm font-medium">
-                Evening Memory Prompt
-              </span>
+              <span className="block text-sm font-medium">Daily memory nudge</span>
               <span className="mt-1 block text-xs text-muted-foreground">
-                Remind me to record my expenses every evening.
+                {native
+                  ? "A reminder to tell Echo what you spent: 9 AM or 9 PM."
+                  : "Install the Android app to get reminders on your phone."}
               </span>
             </span>
-            <input
-              type="checkbox"
-              className="rounded-full border-border bg-surface-3 text-emerald focus:ring-emerald"
-              defaultChecked
+          </div>
+          <div className="px-3 pb-3">
+            <Segmented
+              ariaLabel="reminder-time"
+              value={user.reminderTime}
+              onChange={(v) =>
+                updateUser({ reminderTime: v as UserInfo["reminderTime"] })
+              }
+              options={(["morning", "evening", "off"] as const).map((r) => ({
+                value: r,
+                label:
+                  r === "off" ? "Off" : r === "morning" ? "Morning" : "Evening",
+              }))}
+              size="sm"
             />
+          </div>
+          <div className="settings-row">
+            <span className="grid size-9 place-items-center rounded-xl bg-surface-3 text-muted-foreground">
+              <Ear size={17} />
+            </span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block text-sm font-medium">Agent replies</span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Your voice agent posts what it saved or answered, so you can
+                check it later. Manage it in Android&apos;s notification
+                settings.
+              </span>
+            </span>
           </div>
         </div>
       </main>
