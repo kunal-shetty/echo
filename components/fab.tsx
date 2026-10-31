@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Plus, PencilLine, FileSpreadsheet, Tag } from "lucide-react";
+import { haptic } from "@/lib/native/haptics";
 
 interface FabProps {
   visible?: boolean;
@@ -116,7 +117,10 @@ export function Fab({
           className="fab-main"
           aria-label={open ? "Close add menu" : "Add a memory"}
           aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => {
+            haptic("tap");
+            setOpen((v) => !v);
+          }}
           whileTap={{ scale: 0.94 }}
         >
           <motion.span
