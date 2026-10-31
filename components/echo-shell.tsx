@@ -8,8 +8,10 @@ import { Fab } from "@/components/fab";
 import { ManualAddSheet } from "@/components/manual-add-sheet";
 import { BulkAddSheet } from "@/components/bulk-add-sheet";
 import { CategorySheet } from "@/components/category-sheet";
+import { NativeBridge } from "@/components/native-bridge";
 import { useTransactions } from "@/lib/use-transactions";
 import { useApp } from "@/context/AppContext";
+import { haptic } from "@/lib/native/haptics";
 import type { Transaction } from "@/lib/schema";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -31,6 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // it. Deferred a tick so the sheet is mounted before we call start.
   useEffect(() => {
     if (!voiceOpen) return;
+    haptic("tap");
     const t = setTimeout(() => voiceSheetRef.current?.start(), 0);
     return () => clearTimeout(t);
   }, [voiceOpen]);
@@ -52,24 +55,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       transactedAt: expense.transactedAt,
       clarified: expense.clarified,
     });
+    haptic(saved ? "success" : "error");
     setToast(saved ? `Saved · ${saved.merchantRaw}` : "Couldn't save. Please try again.");
   };
 
   /** The server already saved this transaction; just show it. */
   const handleCreated = (expense: Transaction) => {
     tx.ingest(expense);
+    haptic("success");
     setVoiceOpen(false);
     setToast(`Saved · ${expense.merchantRaw}`);
   };
 
   const handleUpdated = (expense: Transaction) => {
     tx.ingest(expense);
+    haptic("success");
     setVoiceOpen(false);
     setToast(`Updated · ${expense.merchantRaw}`);
   };
 
   const handleDeleted = () => {
     void tx.refresh();
+    haptic("success");
     setVoiceOpen(false);
     setToast("Deleted");
   };
@@ -94,6 +101,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onClose={() => setAddMode(null)}
           onSaved={(saved) => {
             setAddMode(null);
+            haptic("success");
             setToast(`Saved · ${saved.merchantRaw}`);
           }}
         />
@@ -104,6 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onClose={() => setEditing(null)}
           onSaved={(saved) => {
             setEditing(null);
+            haptic("success");
             setToast(`Updated · ${saved.merchantRaw}`);
           }}
         />
@@ -112,6 +121,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onClose={() => setAddMode(null)}
           onComplete={(inserted, failures) => {
             setAddMode(null);
+            haptic(inserted === 0 ? "warning" : "success");
             if (inserted === 0) {
               setToast("Nothing imported");
             } else if (failures > 0) {
@@ -130,6 +140,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onClose={() => setAddMode(null)}
           onSaved={(cat) => {
             setAddMode(null);
+            haptic("success");
             setToast(`Saved · ${cat.name}`);
           }}
         />
@@ -140,6 +151,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onPickCategory={() => setAddMode("category")}
         />
         <Toast message={toast} onDismiss={() => setToast(null)} />
+        <NativeBridge />
       </div>
     </div>
   );
