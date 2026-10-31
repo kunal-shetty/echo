@@ -8,7 +8,7 @@ scoped to the session's user.
 import logging
 import os
 import re
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import APIRouter, Body, Request
 from groq import Groq
@@ -82,11 +82,9 @@ def _parse(transcript: str, api_key: str, context: str, recent=None) -> dict[str
 # ---------------------------------------------------------------------------
 
 
-@router.post("/transcribe")
-async def transcribe(request: Request):
-    """Transcribes a multipart `file` upload with Groq Whisper."""
-    rate_limit(request, "llm", 30, 60)
-
+async def read_audio_upload(request: Request) -> tuple[str, bytes, str]:
+    """Reads and checks a multipart `file` upload plus its `language` hint.
+    Returns (filename, audio bytes, two-letter language)."""
     declared = int(request.headers.get("content-length") or 0)
     if declared > MAX_AUDIO_BYTES + 64 * 1024:
         raise ApiError(413, "Audio too large")
@@ -106,25 +104,32 @@ async def transcribe(request: Request):
     if content_type and not content_type.startswith("audio/") and content_type != "video/webm":
         raise ApiError(415, "Expected an audio file")
 
-    api_key = _require_api_key("Transcription isn't configured on this deployment.")
-
-    # Whisper accepts webm/opus, mp4, wav, m4a, etc. A language hint improves
-    # accuracy for en-IN users on short utterances.
+    # A language hint improves accuracy for en-IN users on short utterances.
     requested = str(form.get("language") or "en")
     language = requested if re.fullmatch(r"[a-z]{2}", requested) else "en"
+    return file.filename or "audio.webm", audio, language
 
-    def call_whisper() -> str:
-        result = Groq(api_key=api_key).audio.transcriptions.create(
-            file=(file.filename or "audio.webm", audio),
-            model=WHISPER_MODEL,
-            language=language,
-            response_format="json",
-            temperature=0,
-        )
-        return (getattr(result, "text", "") or "").strip()
 
+def whisper(api_key: str, filename: str, audio: bytes, language: str) -> str:
+    """Transcribes audio with Groq Whisper (webm/opus, mp4, wav, m4a, ...)."""
+    result = Groq(api_key=api_key).audio.transcriptions.create(
+        file=(filename, audio),
+        model=WHISPER_MODEL,
+        language=language,
+        response_format="json",
+        temperature=0,
+    )
+    return (getattr(result, "text", "") or "").strip()
+
+
+@router.post("/transcribe")
+async def transcribe(request: Request):
+    """Transcribes a multipart `file` upload with Groq Whisper."""
+    rate_limit(request, "llm", 30, 60)
+    filename, audio, language = await read_audio_upload(request)
+    api_key = _require_api_key("Transcription isn't configured on this deployment.")
     try:
-        text = await run_in_threadpool(call_whisper)
+        text = await run_in_threadpool(whisper, api_key, filename, audio, language)
     except Exception as exc:
         log.exception("[transcribe] Groq request failed")
         raise ApiError(502, "Transcription failed") from exc
@@ -182,6 +187,18 @@ def ask(request: Request, body: Any = Body(None)):
     if not is_supabase_configured():
         raise ApiError(503, "Backend not configured.")
 
+    return answer_question(transcript, api_key, lambda: require_user_id(request), voice_session_id)
+
+
+def answer_question(
+    transcript: str,
+    api_key: str,
+    get_user_id: Callable[[], str],
+    voice_session_id: str | None = None,
+) -> dict[str, Any]:
+    """Parses a question, runs it against the user's transactions and
+    phrases a spoken answer. `get_user_id` is only called once the parse
+    succeeds, so a failed parse never creates a guest."""
     parsed = _parse(transcript, api_key, "ask")
 
     # If the parser heard something else (e.g. "create"), still answer it as
@@ -200,7 +217,7 @@ def ask(request: Request, body: Any = Body(None)):
         direction=parsed["queryDirection"] or default_direction_for_query(transcript),
     )
 
-    user_id = require_user_id(request)
+    user_id = get_user_id()
     result = run_query(user_id, filters)
     supabase = get_supabase()
 
@@ -290,7 +307,12 @@ def voice_intent(request: Request, body: Any = Body(None)):
         raise ApiError(503, "Backend not configured.")
 
     user_id = require_user_id(request)
+    return act_on_transcript(transcript, api_key, user_id)
 
+
+def act_on_transcript(transcript: str, api_key: str, user_id: str) -> dict[str, Any]:
+    """Parses a spoken command and creates, updates or deletes a
+    transaction. Queries are left to answer_question."""
     # The last few transactions let the parser resolve "change the last one".
     try:
         recent = [
