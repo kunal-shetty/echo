@@ -1,6 +1,12 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  useEffect,
+} from "react";
 import type { UserInfo, Transaction } from "@/lib/schema";
 
 interface AppContextType {
@@ -18,12 +24,21 @@ interface AppContextType {
   voiceOpen: boolean;
   setVoiceOpen: (open: boolean) => void;
 
-  toast: string | null;
-  setToast: (message: string | null) => void;
+  toast: ToastState | null;
+  setToast: (message: string | null, tone?: ToastTone) => void;
 
   // Onboarding
   onboarded: boolean;
   setOnboarded: (done: boolean) => void;
+}
+
+export type ToastTone = "success" | "error";
+
+export interface ToastState {
+  message: string;
+  tone: ToastTone;
+  /** Changes on every call, so repeating a message re-animates it. */
+  id: number;
 }
 
 const DEFAULT_USER: UserInfo = {
@@ -46,11 +61,18 @@ export function AppContextProvider({
   );
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToastState] = useState<ToastState | null>(null);
+
+  const setToast = useCallback(
+    (message: string | null, tone: ToastTone = "success") => {
+      setToastState(message ? { message, tone, id: Date.now() } : null);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 3000);
+    const timer = setTimeout(() => setToastState(null), 3000);
     return () => clearTimeout(timer);
   }, [toast]);
 
