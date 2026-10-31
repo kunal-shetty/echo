@@ -97,7 +97,7 @@ export function AgentScreen() {
   );
 
   const header = (
-    <Header screen="agent" onVoice={() => setVoiceOpen(true)} scrolled={false} />
+    <Header screen="agent" onVoice={() => setVoiceOpen(true)} />
   );
 
   if (!agent.supported) {
