@@ -35,7 +35,8 @@ export function AnimatedNumber({
   duration = 0.6,
   className,
 }: AnimatedNumberProps) {
-  const motionValue = useMotionValue(value);
+  // Start from zero so the figure counts up when it first appears.
+  const motionValue = useMotionValue(0);
   const display = useTransform(motionValue, (latest) => format(Math.round(latest * 100) / 100));
 
   useEffect(() => {
