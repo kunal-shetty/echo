@@ -3,7 +3,7 @@
 import { Header } from "@/components/home/header";
 import { useApp } from "@/context/AppContext";
 import { motion } from "motion/react";
-import { CircleHelp, MessageSquare, Mail } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 
 export default function HelpPage() {
   const { setVoiceOpen } = useApp();
@@ -13,7 +13,6 @@ export default function HelpPage() {
       <Header
         screen="help"
         onVoice={() => setVoiceOpen(true)}
-        scrolled={false}
       />
       <main className="flex flex-col gap-5 px-5 pb-28">
         <div className="panel !p-4">
@@ -37,14 +36,14 @@ export default function HelpPage() {
             </div>
           </div>
         </div>
-        <div className="flex flex-col gap-3">
-          <button className="primary-button flex items-center justify-center gap-2">
-            <MessageSquare size={17} /> Chat with Support
-          </button>
-          <button className="secondary-button flex items-center justify-center gap-2">
-            <Mail size={17} /> Email us
-          </button>
-        </div>
+        <motion.button
+          type="button"
+          className="primary-button"
+          onClick={() => setVoiceOpen(true)}
+          whileTap={{ scale: 0.98 }}
+        >
+          <MessageSquare size={17} /> Ask Echo a question
+        </motion.button>
       </main>
     </>
   );
