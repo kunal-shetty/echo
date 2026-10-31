@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import { Sparkles, TrendingUp, AlertCircle, Heart } from "lucide-react";
 import { money } from "@/lib/fmt";
 
-interface WrappedInsight {
+export interface WrappedInsight {
   kind:
     | "spend_pattern"
     | "anomaly"
