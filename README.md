@@ -141,3 +141,30 @@ Set Echo's battery use to "Unrestricted" so Android doesn't stop the agent.
 Android only lets an app start the microphone service while the app is open.
 So if the phone reboots or the system kills the agent, it posts a notification asking you to reopen Echo.
 iOS doesn't allow background wake-word listening, so the agent is Android-only.
+
+## ☁️ Deploying on Vercel
+
+Echo is deployed as two Vercel projects from this one repo:
+
+| Project | URL | Root Directory | Framework |
+|---|---|---|---|
+| Frontend (Next.js) | https://echomoney.vercel.app | `.` | Next.js |
+| Backend (FastAPI) | https://echomoneyapi.vercel.app | `backend` | FastAPI (detected from `pyproject.toml`) |
+
+The browser and the Android app only talk to the frontend. It forwards
+`/api/*` to the backend, so the session cookie stays on `echomoney.vercel.app`
+and no CORS setup is needed.
+
+**Frontend environment variables**
+
+- `BACKEND_URL=https://echomoneyapi.vercel.app`
+- `ECHO_PROXY_SECRET` is a long random string, the same in both projects. Vercel replaces the visitor's IP on the request to the backend, so the frontend passes it along with this secret. Without it, every user would share one rate limit.
+
+**Backend environment variables**
+
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, `RESEND_API_KEY`, `RESEND_FROM` (plus `GROQ_MODEL` if you override it).
+- `APP_ENV=production`, which turns on secure cookies and requires `OTP_PEPPER`.
+- `OTP_PEPPER`
+- `ECHO_PROXY_SECRET`, with the same value as the frontend.
+
+The Android app loads `https://echomoney.vercel.app` by default (see `capacitor.config.ts`).
