@@ -12,7 +12,7 @@ from fastapi.exceptions import RequestValidationError
 
 from app import config  # noqa: F401  (loads .env before anything reads it)
 from app.http import ApiError, api_error_handler, invalid_body_handler, server_error_handler
-from app.routes import auth, categories, insights, me, transactions, voice
+from app.routes import agent, auth, categories, insights, me, transactions, voice
 from app.user import cookie_ops
 
 logging.basicConfig(level=logging.INFO)
@@ -38,7 +38,7 @@ async def apply_cookie_changes(request: Request, call_next):
     return response
 
 
-for module in (auth, me, transactions, categories, insights, voice):
+for module in (auth, me, transactions, categories, insights, voice, agent):
     app.include_router(module.router)
 
 
