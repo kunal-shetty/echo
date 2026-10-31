@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
+import { motion } from "motion/react";
 import { BottomNav } from "@/components/bottom-nav";
 import { VoiceSheet, type VoiceSheetHandle } from "@/components/voice-sheet";
 import { Toast } from "@/components/ui/toast";
@@ -12,6 +14,7 @@ import { NativeBridge } from "@/components/native-bridge";
 import { useTransactions } from "@/lib/use-transactions";
 import { useApp } from "@/context/AppContext";
 import { haptic } from "@/lib/native/haptics";
+import { EASE_OUT } from "@/lib/motion";
 import type { Transaction } from "@/lib/schema";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -25,6 +28,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     toast,
     setToast,
   } = useApp();
+  const pathname = usePathname();
 
   const voiceSheetRef = useRef<VoiceSheetHandle>(null);
   const tx = useTransactions();
@@ -56,7 +60,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       clarified: expense.clarified,
     });
     haptic(saved ? "success" : "error");
-    setToast(saved ? `Saved · ${saved.merchantRaw}` : "Couldn't save. Please try again.");
+    if (saved) setToast(`Saved · ${saved.merchantRaw}`);
+    else setToast("Couldn't save. Please try again.", "error");
   };
 
   /** The server already saved this transaction; just show it. */
@@ -84,7 +89,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-viewport">
       <div className="app-frame">
-        <div className="app-content">{children}</div>
+        {/* Re-keyed per route so each screen eases in. Opacity and a small
+         * lift only: a filter here would trap the fixed-position sheets
+         * that screens render. */}
+        <motion.div
+          key={pathname}
+          className="app-content"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.38, ease: EASE_OUT }}
+        >
+          {children}
+        </motion.div>
         <BottomNav onVoice={() => setVoiceOpen(true)} />
         <VoiceSheet
           ref={voiceSheetRef}
@@ -115,6 +131,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             haptic("success");
             setToast(`Updated · ${saved.merchantRaw}`);
           }}
+          onDeleted={(deleted) => {
+            setEditing(null);
+            haptic("success");
+            setToast(`Deleted · ${deleted.merchantRaw}`);
+          }}
         />
         <BulkAddSheet
           open={addMode === "bulk"}
@@ -123,7 +144,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             setAddMode(null);
             haptic(inserted === 0 ? "warning" : "success");
             if (inserted === 0) {
-              setToast("Nothing imported");
+              setToast("Nothing imported", "error");
             } else if (failures > 0) {
               setToast(
                 `Imported ${inserted} ${inserted === 1 ? "memory" : "memories"} (${failures} skipped)`,
@@ -150,7 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onPickBulk={() => setAddMode("bulk")}
           onPickCategory={() => setAddMode("category")}
         />
-        <Toast message={toast} onDismiss={() => setToast(null)} />
+        <Toast toast={toast} />
         <NativeBridge />
       </div>
     </div>
