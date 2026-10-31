@@ -4,10 +4,9 @@ import type { CapacitorConfig } from "@capacitor/cli";
 // every page and /api/* call stays same-origin and the echo_session cookie
 // keeps working. The native wake-word agent reads that same cookie.
 //
-// CAP_SERVER_URL defaults to the Android emulator's address for the host
-// machine. On a phone, point it at your computer's LAN IP or the deployed
-// site, then run `npx cap sync android`.
-const serverUrl = process.env.CAP_SERVER_URL ?? "http://10.0.2.2:3000";
+// Defaults to the production site. To test against your machine, set
+// CAP_SERVER_URL=http://<your-LAN-IP>:3000 and run `npm run android:sync`.
+const serverUrl = process.env.CAP_SERVER_URL ?? "https://echomoney.vercel.app";
 
 const config: CapacitorConfig = {
   appId: "app.echo.finance",
