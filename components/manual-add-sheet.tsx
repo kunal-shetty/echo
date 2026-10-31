@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { Plus, Trash2 } from "lucide-react";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { AmountStepper } from "@/components/ui/amount-stepper";
 import { Field } from "@/components/ui/field";
@@ -19,6 +20,8 @@ interface ManualAddSheetProps {
   initial?: Transaction;
   onClose: () => void;
   onSaved: (tx: Transaction, mode: "add" | "edit") => void;
+  /** Called after an edited memory is deleted. */
+  onDeleted?: (tx: Transaction) => void;
 }
 
 function toDateInput(iso: string): string {
@@ -48,6 +51,7 @@ export function ManualAddSheet({
   initial,
   onClose,
   onSaved,
+  onDeleted,
 }: ManualAddSheetProps) {
   const cats = useCategories();
   const tx = useTransactions();
@@ -59,10 +63,22 @@ export function ManualAddSheet({
   const [direction, setDirection] = useState<"expense" | "income">("expense");
   const [categorySheetOpen, setCategorySheetOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Delete takes two taps; the first arms it for a few seconds.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (!confirmDelete) return;
+    const t = setTimeout(() => setConfirmDelete(false), 3000);
+    return () => clearTimeout(t);
+  }, [confirmDelete]);
 
   // Hydrate / reset whenever the sheet is reopened or `initial` changes.
   useEffect(() => {
     if (!open) return;
+    setError(null);
+    setConfirmDelete(false);
     if (mode === "edit" && initial) {
       setAmount(initial.amountMinor);
       setMerchant(initial.merchantRaw);
@@ -93,6 +109,7 @@ export function ManualAddSheet({
   const handleSubmit = async () => {
     if (!canSave) return;
     setSubmitting(true);
+    setError(null);
     try {
       if (mode === "edit" && initial) {
         const fallbackIso = initial.transactedAt;
@@ -107,6 +124,7 @@ export function ManualAddSheet({
           direction,
         });
         if (updated) onSaved(updated, "edit");
+        else setError("Couldn't save your changes. Please try again.");
       } else {
         const transactedAt = date
           ? fromDateInput(date, new Date().toISOString())
@@ -127,9 +145,28 @@ export function ManualAddSheet({
           clarified: true,
         });
         if (created) onSaved(created, "add");
+        else setError("Couldn't save this memory. Please try again.");
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!initial) return;
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      const ok = await tx.remove(initial.id);
+      if (ok) onDeleted?.(initial);
+      else setError("Couldn't delete this memory. Please try again.");
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   };
 
@@ -181,35 +218,36 @@ export function ManualAddSheet({
             <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
               Category
             </span>
-            {categoryOptions.length === 0 ? (
-              <p className="rounded-xl border border-border bg-surface-2 px-3.5 py-3 text-sm text-muted-foreground">
-                No categories yet — create one to organize your memories.
+            {categoryOptions.length === 0 && (
+              <p className="mb-2 text-xs text-muted-foreground">
+                No categories yet. Create one to organize your memories.
               </p>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {categoryOptions.length > 0 && (
                 <CategoryPill
                   active={categoryId === null}
                   onClick={() => setCategoryId(null)}
                   label="Uncategorized"
                 />
-                {categoryOptions.map((c) => (
-                  <CategoryPill
-                    key={c.value}
-                    active={categoryId === c.value}
-                    onClick={() => setCategoryId(c.value)}
-                    label={c.label}
-                  />
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setCategorySheetOpen(true)}
-                  className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:border-emerald hover:text-emerald"
-                >
-                  <Plus size={14} />
-                  New
-                </button>
-              </div>
-            )}
+              )}
+              {categoryOptions.map((c) => (
+                <CategoryPill
+                  key={c.value}
+                  active={categoryId === c.value}
+                  onClick={() => setCategoryId(c.value)}
+                  label={c.label}
+                />
+              ))}
+              <button
+                type="button"
+                onClick={() => setCategorySheetOpen(true)}
+                className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:border-emerald hover:text-emerald"
+              >
+                <Plus size={14} />
+                New
+              </button>
+            </div>
           </div>
 
           <Field
@@ -227,11 +265,25 @@ export function ManualAddSheet({
             onChange={(e) => setDate(e.target.value)}
           />
 
+          <AnimatePresence>
+            {error && (
+              <motion.p
+                role="alert"
+                className="rounded-xl border border-red/30 bg-red/10 px-3 py-2 text-xs text-red"
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+              >
+                {error}
+              </motion.p>
+            )}
+          </AnimatePresence>
+
           <button
             type="button"
             onClick={handleSubmit}
             disabled={!canSave}
-            className="primary-button disabled:opacity-50"
+            className="primary-button"
           >
             {submitting
               ? "Saving…"
@@ -239,6 +291,22 @@ export function ManualAddSheet({
                 ? "Save changes"
                 : "Save memory"}
           </button>
+
+          {mode === "edit" && initial && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting || submitting}
+              className="danger-button -mt-2"
+            >
+              <Trash2 size={15} />
+              {deleting
+                ? "Deleting…"
+                : confirmDelete
+                  ? "Tap again to delete"
+                  : "Delete memory"}
+            </button>
+          )}
         </div>
       </BottomSheet>
 
