@@ -36,11 +36,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  colorScheme: "light dark",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "white" },
-    { media: "(prefers-color-scheme: dark)", color: "black" },
-  ],
+  // Echo only ships a dark theme, so the browser chrome always matches it.
+  colorScheme: "dark",
+  themeColor: "#0b1120",
 };
 
 export default function RootLayout({
