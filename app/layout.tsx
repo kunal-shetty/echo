@@ -49,7 +49,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="bg-background">
+    // The Android app's WebView adds safe-area CSS variables to <html>
+    // before React hydrates.
+    <html lang="en" className="bg-background" suppressHydrationWarning>
       <body className={`${geist.variable} ${geistMono.variable} antialiased`}>
         <AppContextProvider>
           <TransactionsProvider>
